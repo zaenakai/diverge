@@ -137,24 +137,30 @@ npx sst deploy --stage production
 
 ## Environment Variables
 
+All secrets are managed via SST and stored encrypted in AWS Parameter Store.
+
 ```bash
-# Database (auto-configured by SST)
-DATABASE_URL=
-
-# NextAuth
-NEXTAUTH_SECRET=
-NEXTAUTH_URL=https://diverge.market
-
-# OAuth providers
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GITHUB_CLIENT_ID=
-GITHUB_CLIENT_SECRET=
-
-# Stripe
-STRIPE_SECRET_KEY=
-STRIPE_WEBHOOK_SECRET=
+# Set secrets (one-time setup)
+npx sst secret set NextAuthSecret $(openssl rand -base64 32)
+npx sst secret set GoogleClientId your-google-client-id
+npx sst secret set GoogleClientSecret your-google-client-secret
+npx sst secret set GithubClientId your-github-client-id
+npx sst secret set GithubClientSecret your-github-client-secret
+npx sst secret set StripeSecretKey sk_live_...
+npx sst secret set StripeWebhookSecret whsec_...
 ```
+
+| Variable | Type | How it's set |
+|----------|------|-------------|
+| `DATABASE_URL` | Auto | Linked via `sst.aws.Postgres` |
+| `NEXTAUTH_SECRET` | SST Secret | `npx sst secret set` |
+| `NEXTAUTH_URL` | Env var | Hardcoded in `sst.config.ts` |
+| `GOOGLE_CLIENT_ID` | SST Secret | `npx sst secret set` |
+| `GOOGLE_CLIENT_SECRET` | SST Secret | `npx sst secret set` |
+| `GITHUB_CLIENT_ID` | SST Secret | `npx sst secret set` |
+| `GITHUB_CLIENT_SECRET` | SST Secret | `npx sst secret set` |
+| `STRIPE_SECRET_KEY` | SST Secret | `npx sst secret set` |
+| `STRIPE_WEBHOOK_SECRET` | SST Secret | `npx sst secret set` |
 
 ## Status
 
