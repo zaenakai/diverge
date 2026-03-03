@@ -12,7 +12,7 @@
  * Lower is better.
  */
 
-import type { Platform, CalibrationPoint } from "@prediction-market/core/types.js";
+import type { Platform, CalibrationPoint } from "@diverge/core/types.js";
 
 interface ResolvedMarket {
   id: number;

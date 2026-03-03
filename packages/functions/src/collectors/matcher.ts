@@ -5,8 +5,8 @@
  * Uses structured + fuzzy matching from core/matching.ts.
  */
 
-import { findMatches } from "@prediction-market/core/matching.js";
-import type { Market } from "@prediction-market/core/types.js";
+import { findMatches } from "@diverge/core/matching.js";
+import type { Market } from "@diverge/core/types.js";
 
 export async function handler() {
   console.log("[MarketMatcher] Starting cross-platform matching...");

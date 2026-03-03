@@ -5,8 +5,8 @@
  * upserts into PostgreSQL.
  */
 
-import * as polymarket from "@prediction-market/core/platforms/polymarket.js";
-import * as kalshi from "@prediction-market/core/platforms/kalshi.js";
+import * as polymarket from "@diverge/core/platforms/polymarket.js";
+import * as kalshi from "@diverge/core/platforms/kalshi.js";
 
 export async function handler() {
   console.log("[MarketCollector] Starting collection...");

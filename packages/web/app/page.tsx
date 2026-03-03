@@ -50,9 +50,9 @@ export default function Home() {
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center font-bold text-sm">
-              Δ
+              ◇
             </div>
-            <span className="font-bold text-lg">MarketDelta</span>
+            <span className="font-bold text-lg tracking-tight">diverge</span>
             <span className="text-xs text-white/40 ml-2">BETA</span>
           </div>
           <div className="flex items-center gap-6 text-sm text-white/60">
@@ -221,7 +221,7 @@ export default function Home() {
       <footer className="border-t border-white/10 py-8 mt-12">
         <div className="max-w-7xl mx-auto px-6 flex items-center justify-between text-sm text-white/40">
           <div>
-            MarketDelta — Cross-platform prediction market analytics
+            diverge.market — cross-platform prediction market analytics
           </div>
           <div className="flex gap-4">
             <a href="https://x.com/zaenakai" className="hover:text-white">

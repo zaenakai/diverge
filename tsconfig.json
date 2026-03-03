@@ -13,8 +13,8 @@
     "sourceMap": true,
     "outDir": "./dist",
     "paths": {
-      "@prediction-market/core/*": ["./packages/core/src/*"],
-      "@prediction-market/functions/*": ["./packages/functions/src/*"]
+      "@diverge/core/*": ["./packages/core/src/*"],
+      "@diverge/functions/*": ["./packages/functions/src/*"]
     }
   },
   "exclude": ["node_modules", ".sst", "dist"]

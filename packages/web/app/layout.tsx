@@ -5,7 +5,7 @@ import "./globals.css";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "MarketDelta — Cross-Platform Prediction Market Analytics",
+  title: "Diverge — Cross-Platform Prediction Market Analytics",
   description:
     "Compare Polymarket vs Kalshi: arbitrage scanner, accuracy leaderboard, whale tracking, and cross-platform analytics for prediction markets.",
   keywords: [

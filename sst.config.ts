@@ -3,7 +3,8 @@
 export default $config({
   app(input) {
     return {
-      name: "prediction-market",
+      name: "diverge",
+      // domain: "diverge.market", // uncomment after Route 53 hosted zone is set up
       removal: input?.stage === "production" ? "retain" : "remove",
       home: "aws",
       providers: {
@@ -109,7 +110,7 @@ export default $config({
       link: [database, nextAuthSecret],
       environment: {
         NEXT_PUBLIC_API_URL: api.url,
-        NEXTAUTH_URL: "https://placeholder.com", // will be replaced with domain
+        NEXTAUTH_URL: "https://diverge.market",
       },
     });
 
