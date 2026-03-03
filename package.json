@@ -1,0 +1,14 @@
+{
+  "name": "prediction-market",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "sst dev",
+    "deploy": "sst deploy --stage production",
+    "remove": "sst remove"
+  },
+  "devDependencies": {
+    "sst": "^4.1.8",
+    "typescript": "^5.9.3"
+  }
+}

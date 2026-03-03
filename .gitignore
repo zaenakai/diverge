@@ -1,0 +1,3 @@
+node_modules\n.sst\n.build\n.next\n.env\n*.local
+node_modules/
+dist/
