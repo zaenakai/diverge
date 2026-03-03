@@ -18,6 +18,10 @@ export default $config({
     const stripeSecretKey = new sst.Secret("StripeSecretKey");
     const stripeWebhookSecret = new sst.Secret("StripeWebhookSecret");
     const nextAuthSecret = new sst.Secret("NextAuthSecret");
+    const googleClientId = new sst.Secret("GoogleClientId");
+    const googleClientSecret = new sst.Secret("GoogleClientSecret");
+    const githubClientId = new sst.Secret("GithubClientId");
+    const githubClientSecret = new sst.Secret("GithubClientSecret");
 
     // ── VPC ──────────────────────────────────────────────
     const vpc = new sst.aws.Vpc("Vpc", { bastion: true });
@@ -107,7 +111,14 @@ export default $config({
     // ── Next.js Frontend ─────────────────────────────────
     const site = new sst.aws.Nextjs("Web", {
       path: "packages/web",
-      link: [database, nextAuthSecret],
+      link: [
+        database,
+        nextAuthSecret,
+        googleClientId,
+        googleClientSecret,
+        githubClientId,
+        githubClientSecret,
+      ],
       environment: {
         NEXT_PUBLIC_API_URL: api.url,
         NEXTAUTH_URL: "https://diverge.market",
