@@ -16,71 +16,80 @@ export default $config({
     // ── Secrets ──────────────────────────────────────────
     const stripeSecretKey = new sst.Secret("StripeSecretKey");
     const stripeWebhookSecret = new sst.Secret("StripeWebhookSecret");
-    const databaseUrl = new sst.Secret("DatabaseUrl");
+    const nextAuthSecret = new sst.Secret("NextAuthSecret");
 
-    // ── Database ─────────────────────────────────────────
-    // Using external PostgreSQL (Neon or RDS)
-    // Connection string stored in DatabaseUrl secret
+    // ── VPC ──────────────────────────────────────────────
+    const vpc = new sst.aws.Vpc("Vpc", { bastion: true });
 
-    // ── Shared environment for all functions ─────────────
-    const sharedEnv = {
-      DATABASE_URL: databaseUrl.value,
+    // ── Database (Aurora Serverless v2 PostgreSQL) ───────
+    const database = new sst.aws.Postgres("Database", {
+      vpc,
+      scaling: {
+        min: "0.5 ACU",
+        max: "4 ACU",
+      },
+    });
+
+    // ── Shared config for all functions ──────────────────
+    const sharedConfig = {
+      vpc,
+      link: [database],
     };
 
     // ── Data Collection Crons ────────────────────────────
 
     // Collect market data every 5 minutes
-    const marketCollector = new sst.aws.Cron("MarketCollector", {
+    new sst.aws.Cron("MarketCollector", {
       schedule: "rate(5 minutes)",
       function: {
         handler: "packages/functions/src/collectors/markets.handler",
         timeout: "120 seconds",
         memory: "512 MB",
-        environment: sharedEnv,
+        ...sharedConfig,
       },
     });
 
     // Collect price snapshots every minute
-    const priceCollector = new sst.aws.Cron("PriceCollector", {
+    new sst.aws.Cron("PriceCollector", {
       schedule: "rate(1 minute)",
       function: {
         handler: "packages/functions/src/collectors/prices.handler",
         timeout: "60 seconds",
         memory: "256 MB",
-        environment: sharedEnv,
+        ...sharedConfig,
       },
     });
 
     // Run market matching every 30 minutes
-    const marketMatcher = new sst.aws.Cron("MarketMatcher", {
+    new sst.aws.Cron("MarketMatcher", {
       schedule: "rate(30 minutes)",
       function: {
         handler: "packages/functions/src/collectors/matcher.handler",
         timeout: "120 seconds",
         memory: "512 MB",
-        environment: sharedEnv,
+        ...sharedConfig,
       },
     });
 
     // Detect arb opportunities every 2 minutes
-    const arbDetector = new sst.aws.Cron("ArbDetector", {
+    new sst.aws.Cron("ArbDetector", {
       schedule: "rate(2 minutes)",
       function: {
         handler: "packages/functions/src/collectors/arbs.handler",
         timeout: "60 seconds",
         memory: "256 MB",
-        environment: sharedEnv,
+        ...sharedConfig,
       },
     });
 
     // Calculate accuracy scores daily at midnight UTC
-    const accuracyCalculator = new sst.aws.Cron("AccuracyCalculator", {
+    new sst.aws.Cron("AccuracyCalculator", {
       schedule: "cron(0 0 * * ? *)",
       function: {
         handler: "packages/functions/src/collectors/accuracy.handler",
         timeout: "300 seconds",
         memory: "512 MB",
-        environment: sharedEnv,
+        ...sharedConfig,
       },
     });
 
@@ -90,24 +99,24 @@ export default $config({
       timeout: "30 seconds",
       memory: "256 MB",
       url: true,
-      environment: {
-        ...sharedEnv,
-        STRIPE_SECRET_KEY: stripeSecretKey.value,
-        STRIPE_WEBHOOK_SECRET: stripeWebhookSecret.value,
-      },
+      ...sharedConfig,
+      link: [database, stripeSecretKey, stripeWebhookSecret],
     });
 
     // ── Next.js Frontend ─────────────────────────────────
     const site = new sst.aws.Nextjs("Web", {
       path: "packages/web",
+      link: [database, nextAuthSecret],
       environment: {
         NEXT_PUBLIC_API_URL: api.url,
+        NEXTAUTH_URL: "https://placeholder.com", // will be replaced with domain
       },
     });
 
     return {
       api: api.url,
       site: site.url,
+      database: database.clusterArn,
     };
   },
 });
