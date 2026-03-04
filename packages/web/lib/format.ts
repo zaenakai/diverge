@@ -3,6 +3,34 @@
  * Extracted from mock-data.ts — these are pure helpers with no data dependencies.
  */
 
+/**
+ * Convert Prisma Decimal objects (or any value) to a plain number.
+ * The API returns decimals as { s: 1, e: -1, d: [9995000] } — this handles that.
+ *
+ * Decimal.js stores: { s: sign, e: exponent (of MSD), d: digit groups (base 1e7) }
+ * d[0] may have fewer than 7 digits; subsequent groups are always 7 digits.
+ */
+export function toNumber(val: any): number {
+  if (val === null || val === undefined) return 0;
+  if (typeof val === 'number') return val;
+  if (typeof val === 'string') return parseFloat(val) || 0;
+  if (val.d && Array.isArray(val.d)) {
+    const s = val.s ?? 1;
+    const e = val.e ?? 0;
+    const d: number[] = val.d;
+    // Build the coefficient integer by treating d as base-1e7 digits
+    let n = 0;
+    for (let i = 0; i < d.length; i++) {
+      n = n * 1e7 + d[i];
+    }
+    // d[0] may have 1-7 digits; the rest are always 7
+    const len0 = d[0] > 0 ? Math.floor(Math.log10(d[0])) + 1 : 1;
+    const totalDigits = len0 + (d.length - 1) * 7;
+    return s * n * Math.pow(10, e + 1 - totalDigits);
+  }
+  return Number(val) || 0;
+}
+
 export function formatUsd(n: number): string {
   if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
   if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;

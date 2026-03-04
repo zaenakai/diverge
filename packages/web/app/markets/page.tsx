@@ -274,6 +274,7 @@ export default function MarketsPage() {
         setAllMarkets([...matchedExplorer, ...singleExplorer]);
         setError(null);
       } catch (err: any) {
+        console.error("[Markets] Failed to fetch data:", err);
         if (!cancelled) {
           setError(err.message ?? "Failed to load markets");
         }
@@ -381,7 +382,7 @@ export default function MarketsPage() {
           </p>
         </div>
         {loading && (
-          <span className="text-[10px] text-white/30 animate-pulse">Loading...</span>
+          <span className="text-[10px] text-white/30 animate-pulse">Loading markets...</span>
         )}
       </div>
 

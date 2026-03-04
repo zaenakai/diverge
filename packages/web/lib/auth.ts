@@ -1,8 +1,10 @@
 import NextAuth from "next-auth";
-import { PrismaAdapter } from "@auth/prisma-adapter";
+import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import Google from "next-auth/providers/google";
 import GitHub from "next-auth/providers/github";
-import { prisma } from "./db";
+import { db } from "./db";
+import * as schema from "../../core/src/db/schema";
+import { eq } from "drizzle-orm";
 import type { DefaultSession } from "next-auth";
 
 declare module "next-auth" {
@@ -16,7 +18,12 @@ declare module "next-auth" {
 }
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
-  adapter: PrismaAdapter(prisma),
+  adapter: DrizzleAdapter(db, {
+    usersTable: schema.users,
+    accountsTable: schema.accounts,
+    sessionsTable: schema.sessions as any,
+    verificationTokensTable: schema.verificationTokens,
+  }),
   providers: [
     Google({
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -39,9 +46,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       // Refresh tier from DB on session update
       if (trigger === "update" && token.id) {
-        const dbUser = await prisma.user.findUnique({
-          where: { id: token.id as string },
-          select: { tier: true, apiKey: true },
+        const dbUser = await db.query.users.findFirst({
+          where: eq(schema.users.id, token.id as string),
+          columns: { tier: true, apiKey: true },
         });
         if (dbUser) {
           token.tier = dbUser.tier;

@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { stripe, PLANS, type PlanKey } from "@/lib/stripe";
-import { prisma } from "@/lib/db";
+import { db, schema, eq } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
-  if (!stripe) return NextResponse.json({ error: "Stripe not configured" }, { status: 503 });
   if (!stripe) return NextResponse.json({ error: "Stripe not configured" }, { status: 503 });
   const session = await auth();
   if (!session?.user?.id) {
@@ -18,11 +17,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
   }
 
-  const user = await prisma.user.findUnique({
-    where: { id: session.user.id },
-    select: { email: true, stripeCustomerId: true },
-  });
+  const userRows = await db
+    .select({ email: schema.users.email, stripeCustomerId: schema.users.stripeCustomerId })
+    .from(schema.users)
+    .where(eq(schema.users.id, session.user.id))
+    .limit(1);
 
+  const user = userRows[0];
   if (!user) {
     return NextResponse.json({ error: "User not found" }, { status: 404 });
   }
@@ -35,10 +36,10 @@ export async function POST(req: NextRequest) {
       metadata: { userId: session.user.id },
     });
     customerId = customer.id;
-    await prisma.user.update({
-      where: { id: session.user.id },
-      data: { stripeCustomerId: customerId },
-    });
+    await db
+      .update(schema.users)
+      .set({ stripeCustomerId: customerId })
+      .where(eq(schema.users.id, session.user.id));
   }
 
   const origin = req.headers.get("origin") ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000";

@@ -188,6 +188,7 @@ export default function AccuracyPage() {
         setCalibrationData(calRes);
         setError(null);
       } catch (err: any) {
+        console.error("[Accuracy] Failed to fetch data:", err);
         if (!cancelled) {
           setError(err.message ?? "Failed to load accuracy data");
         }
@@ -210,17 +211,32 @@ export default function AccuracyPage() {
 
   if (loading) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <div className="text-center py-20 text-white/40 animate-pulse">Loading accuracy data...</div>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
+        <div>
+          <div className="h-8 w-56 bg-white/[0.06] rounded-lg animate-pulse" />
+          <div className="h-4 w-96 bg-white/[0.04] rounded animate-pulse mt-2" />
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          {[...Array(2)].map((_, i) => (
+            <div key={i} className="rounded-xl border border-white/10 bg-white/[0.02] p-6 space-y-3">
+              <div className="h-4 w-24 bg-white/[0.06] rounded animate-pulse" />
+              <div className="h-14 w-32 bg-white/[0.08] rounded animate-pulse" />
+              <div className="h-3 w-40 bg-white/[0.04] rounded animate-pulse" />
+            </div>
+          ))}
+        </div>
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6">
+          <div className="h-[350px] bg-white/[0.03] rounded animate-pulse" />
+        </div>
       </div>
     );
   }
 
-  if (error || !accuracyData) {
+  if (error && !accuracyData) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
         <div className="text-center py-20">
-          <p className="text-red-400 mb-4">Failed to load accuracy data: {error ?? "Unknown error"}</p>
+          <p className="text-red-400 mb-4">Failed to load accuracy data: {error}</p>
           <button
             onClick={() => window.location.reload()}
             className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition"
@@ -228,6 +244,14 @@ export default function AccuracyPage() {
             Retry
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (!accuracyData) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="text-center py-20 text-white/30">No accuracy data available yet.</div>
       </div>
     );
   }

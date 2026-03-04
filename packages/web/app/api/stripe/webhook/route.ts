@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { stripe } from "@/lib/stripe";
-import { prisma } from "@/lib/db";
+import { db, schema, eq } from "@/lib/db";
 import Stripe from "stripe";
 
 export async function POST(req: NextRequest) {
@@ -41,13 +41,13 @@ export async function POST(req: NextRequest) {
         const session = event.data.object as Stripe.Checkout.Session;
         if (session.metadata?.userId && session.metadata?.plan) {
           const tier = session.metadata.plan === "enterprise" ? "enterprise" : "pro";
-          await prisma.user.update({
-            where: { id: session.metadata.userId },
-            data: {
+          await db
+            .update(schema.users)
+            .set({
               tier,
               stripeCustomerId: session.customer as string,
-            },
-          });
+            })
+            .where(eq(schema.users.id, session.metadata.userId));
         }
         break;
       }
@@ -62,12 +62,15 @@ export async function POST(req: NextRequest) {
 
 async function handleSubscriptionChange(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string;
-  const user = await prisma.user.findFirst({
-    where: { stripeCustomerId: customerId },
-  });
+  const userRows = await db
+    .select({ id: schema.users.id })
+    .from(schema.users)
+    .where(eq(schema.users.stripeCustomerId, customerId))
+    .limit(1);
+
+  const user = userRows[0];
   if (!user) return;
 
-  // Determine tier from the price
   const priceId = subscription.items.data[0]?.price?.id;
   let tier = "free";
   if (priceId === process.env.STRIPE_PRO_PRICE_ID) {
@@ -76,19 +79,18 @@ async function handleSubscriptionChange(subscription: Stripe.Subscription) {
     tier = "enterprise";
   }
 
-  // Only update if subscription is active
   if (subscription.status === "active" || subscription.status === "trialing") {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { tier },
-    });
+    await db
+      .update(schema.users)
+      .set({ tier })
+      .where(eq(schema.users.id, user.id));
   }
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string;
-  await prisma.user.updateMany({
-    where: { stripeCustomerId: customerId },
-    data: { tier: "free" },
-  });
+  await db
+    .update(schema.users)
+    .set({ tier: "free" })
+    .where(eq(schema.users.stripeCustomerId, customerId));
 }

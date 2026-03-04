@@ -5,6 +5,8 @@
  * Falls back gracefully so the frontend can still render with mock data.
  */
 
+import { toNumber } from "./format";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 
 // ── Types ────────────────────────────────────────────
@@ -177,6 +179,79 @@ export interface StatsResponse {
   totalVolume24h: number;
 }
 
+// ── Decimal normalization ────────────────────────────
+// The API returns Prisma Decimal fields as objects like { s:1, e:-1, d:[9995000] }.
+// We normalize these to plain numbers at the API layer so pages don't have to worry.
+
+function normalizeMarket(m: any): ApiMarket {
+  return {
+    ...m,
+    yesPrice: toNumber(m.yesPrice),
+    noPrice: toNumber(m.noPrice),
+    volume24h: toNumber(m.volume24h),
+    liquidity: toNumber(m.liquidity),
+    resolutionDate: m.resolutionDate && typeof m.resolutionDate === 'object' && !('s' in m.resolutionDate)
+      ? null  // empty {} from API
+      : m.resolutionDate,
+    createdAt: typeof m.createdAt === 'object' ? '' : m.createdAt,
+    updatedAt: typeof m.updatedAt === 'object' ? '' : m.updatedAt,
+  };
+}
+
+function normalizeMatch(m: any): MatchedMarketPair {
+  return {
+    ...m,
+    confidence: toNumber(m.confidence),
+    spread: toNumber(m.spread),
+    marketA: normalizeMarket(m.marketA),
+    marketB: normalizeMarket(m.marketB),
+  };
+}
+
+function normalizeArb(a: any): ArbResult {
+  return {
+    ...a,
+    spreadRaw: toNumber(a.spreadRaw),
+    spreadAdjusted: toNumber(a.spreadAdjusted),
+    buyPrice: toNumber(a.buyPrice),
+    sellPrice: toNumber(a.sellPrice),
+    volumeMin: toNumber(a.volumeMin),
+    confidence: toNumber(a.confidence),
+    marketA: normalizeMarket(a.marketA),
+    marketB: normalizeMarket(a.marketB),
+  };
+}
+
+function normalizeWhaleTrade(t: any): WhaleTradeResult {
+  return {
+    ...t,
+    sizeUsd: toNumber(t.sizeUsd),
+    price: toNumber(t.price),
+  };
+}
+
+function normalizeStats(s: any): StatsResponse {
+  return {
+    totalMarkets: toNumber(s.totalMarkets),
+    polymarketMarkets: toNumber(s.polymarketMarkets),
+    kalshiMarkets: toNumber(s.kalshiMarkets),
+    totalMatched: toNumber(s.totalMatched),
+    activeArbs: toNumber(s.activeArbs),
+    avgBrierScore: s.avgBrierScore != null ? toNumber(s.avgBrierScore) : null,
+    totalVolume24h: toNumber(s.totalVolume24h),
+  };
+}
+
+function normalizePricePoint(p: any): PricePoint {
+  return {
+    yesPrice: toNumber(p.yesPrice),
+    noPrice: toNumber(p.noPrice),
+    volume24h: toNumber(p.volume24h),
+    liquidity: toNumber(p.liquidity),
+    recordedAt: typeof p.recordedAt === 'object' ? '' : p.recordedAt,
+  };
+}
+
 // ── Fetch wrapper ────────────────────────────────────
 
 class ApiError extends Error {
@@ -228,11 +303,25 @@ export async function getMarkets(opts?: {
   limit?: number;
   offset?: number;
 }): Promise<MarketsResponse> {
-  return apiFetch<MarketsResponse>("/markets", opts);
+  const raw = await apiFetch<any>("/markets", opts);
+  return {
+    ...raw,
+    markets: (raw.markets ?? []).map(normalizeMarket),
+  };
 }
 
 export async function getMarketDetail(id: number | string): Promise<MarketDetailResponse> {
-  return apiFetch<MarketDetailResponse>(`/markets/${id}`);
+  const raw = await apiFetch<any>(`/markets/${id}`);
+  return {
+    ...raw,
+    market: normalizeMarket(raw.market),
+    matches: (raw.matches ?? []).map((m: any) => ({
+      ...m,
+      confidence: toNumber(m.confidence),
+      otherMarket: normalizeMarket(m.otherMarket),
+    })),
+    priceHistory: (raw.priceHistory ?? []).map(normalizePricePoint),
+  };
 }
 
 export async function getMatches(opts?: {
@@ -240,7 +329,11 @@ export async function getMatches(opts?: {
   limit?: number;
   offset?: number;
 }): Promise<MatchesResponse> {
-  return apiFetch<MatchesResponse>("/matches", opts);
+  const raw = await apiFetch<any>("/matches", opts);
+  return {
+    ...raw,
+    matches: (raw.matches ?? []).map(normalizeMatch),
+  };
 }
 
 export async function getArbs(opts?: {
@@ -250,26 +343,60 @@ export async function getArbs(opts?: {
   limit?: number;
   offset?: number;
 }): Promise<ArbsResponse> {
-  return apiFetch<ArbsResponse>("/arbs", opts);
+  const raw = await apiFetch<any>("/arbs", opts);
+  return {
+    ...raw,
+    arbs: (raw.arbs ?? []).map(normalizeArb),
+  };
 }
 
 export async function getAccuracy(opts?: {
   platform?: string;
 }): Promise<AccuracyResponse> {
-  return apiFetch<AccuracyResponse>("/accuracy", opts);
+  const raw = await apiFetch<any>("/accuracy", opts);
+  return {
+    byPlatform: (raw.byPlatform ?? []).map((p: any) => ({
+      ...p,
+      avgBrierScore: p.avgBrierScore != null ? toNumber(p.avgBrierScore) : null,
+      totalResolved: toNumber(p.totalResolved),
+    })),
+    byCategory: raw.byCategory ?? [],
+    notableMisses: (raw.notableMisses ?? []).map((m: any) => ({
+      ...m,
+      finalPrice: m.finalPrice != null ? toNumber(m.finalPrice) : null,
+      outcome: m.outcome != null ? toNumber(m.outcome) : null,
+      brierScore: m.brierScore != null ? toNumber(m.brierScore) : null,
+    })),
+  };
 }
 
 export async function getCalibration(): Promise<CalibrationResponse> {
-  return apiFetch<CalibrationResponse>("/accuracy/calibration");
+  const raw = await apiFetch<any>("/accuracy/calibration");
+  return {
+    buckets: (raw.buckets ?? []).map((b: any) => ({
+      predicted: toNumber(b.predicted),
+      platforms: Object.fromEntries(
+        Object.entries(b.platforms ?? {}).map(([k, v]: [string, any]) => [
+          k,
+          { actual: toNumber(v.actual), sampleSize: toNumber(v.sampleSize) },
+        ])
+      ),
+    })),
+  };
 }
 
 export async function getWhales(opts?: {
   limit?: number;
   offset?: number;
 }): Promise<WhalesResponse> {
-  return apiFetch<WhalesResponse>("/whales", opts);
+  const raw = await apiFetch<any>("/whales", opts);
+  return {
+    ...raw,
+    trades: (raw.trades ?? []).map(normalizeWhaleTrade),
+  };
 }
 
 export async function getStats(): Promise<StatsResponse> {
-  return apiFetch<StatsResponse>("/stats");
+  const raw = await apiFetch<any>("/stats");
+  return normalizeStats(raw);
 }
