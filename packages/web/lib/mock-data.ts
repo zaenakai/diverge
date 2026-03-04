@@ -102,20 +102,20 @@ function createRng(seed: number) {
   };
 }
 
-const rng = createRng(42);
-
-function generateSparkline(base: number, volatility: number = 0.05): number[] {
+function generateSparkline(base: number, seed: number, volatility: number = 0.05): number[] {
+  const r = createRng(seed);
   const points: number[] = [];
   let current = base;
   for (let i = 0; i < 30; i++) {
-    current += (rng() - 0.5) * volatility;
+    current += (r() - 0.5) * volatility;
     current = Math.max(0.02, Math.min(0.98, current));
     points.push(Math.round(current * 100) / 100);
   }
   return points;
 }
 
-function generatePriceHistory(polyBase: number, kalshiBase: number) {
+function generatePriceHistory(polyBase: number, kalshiBase: number, seed: number) {
+  const r = createRng(seed);
   const history: { date: string; poly: number; kalshi: number }[] = [];
   const spreadHistory: { date: string; spread: number }[] = [];
   let poly = polyBase - 0.08;
@@ -124,8 +124,8 @@ function generatePriceHistory(polyBase: number, kalshiBase: number) {
   for (let i = 29; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    poly += (rng() - 0.48) * 0.03;
-    kalshi += (rng() - 0.48) * 0.03;
+    poly += (r() - 0.48) * 0.03;
+    kalshi += (r() - 0.48) * 0.03;
     poly = Math.max(0.05, Math.min(0.95, poly));
     kalshi = Math.max(0.05, Math.min(0.95, kalshi));
     const dateStr = date.toISOString().split("T")[0];
@@ -154,39 +154,39 @@ export const platformStats = {
 
 export const markets: Market[] = [
   // Politics
-  { id: "pm-1", title: "Will Trump win 2028 Republican Primary?", category: "politics", platform: "polymarket", yesPrice: 0.72, noPrice: 0.28, volume24h: 2_400_000, totalVolume: 45_000_000, endDate: "2028-06-01", createdAt: "2026-01-15", change24h: 2.3, matchedId: "ka-1", sparkline: generateSparkline(0.72) },
-  { id: "ka-1", title: "Trump wins 2028 GOP nomination", category: "politics", platform: "kalshi", yesPrice: 0.67, noPrice: 0.33, volume24h: 1_100_000, totalVolume: 18_000_000, endDate: "2028-06-01", createdAt: "2026-01-20", change24h: 1.8, matchedId: "pm-1", sparkline: generateSparkline(0.67) },
-  { id: "pm-2", title: "Democrats win 2026 Senate majority?", category: "politics", platform: "polymarket", yesPrice: 0.41, noPrice: 0.59, volume24h: 1_800_000, totalVolume: 32_000_000, endDate: "2026-11-03", createdAt: "2025-11-10", change24h: -1.5, matchedId: "ka-2", sparkline: generateSparkline(0.41) },
-  { id: "ka-2", title: "Dems control Senate after 2026 midterms", category: "politics", platform: "kalshi", yesPrice: 0.38, noPrice: 0.62, volume24h: 890_000, totalVolume: 15_000_000, endDate: "2026-11-03", createdAt: "2025-12-01", change24h: -2.1, matchedId: "pm-2", sparkline: generateSparkline(0.38) },
-  { id: "pm-3", title: "Will DeSantis run for President in 2028?", category: "politics", platform: "polymarket", yesPrice: 0.55, noPrice: 0.45, volume24h: 650_000, totalVolume: 8_200_000, endDate: "2027-12-31", createdAt: "2026-02-01", change24h: 3.1, matchedId: "ka-3", sparkline: generateSparkline(0.55) },
-  { id: "ka-3", title: "DeSantis 2028 presidential campaign", category: "politics", platform: "kalshi", yesPrice: 0.49, noPrice: 0.51, volume24h: 320_000, totalVolume: 4_100_000, endDate: "2027-12-31", createdAt: "2026-02-05", change24h: 2.4, matchedId: "pm-3", sparkline: generateSparkline(0.49) },
-  { id: "pm-4", title: "Ukraine ceasefire before July 2026?", category: "politics", platform: "polymarket", yesPrice: 0.23, noPrice: 0.77, volume24h: 1_200_000, totalVolume: 22_000_000, endDate: "2026-07-01", createdAt: "2025-09-15", change24h: -4.2, sparkline: generateSparkline(0.23) },
+  { id: "pm-1", title: "Will Trump win 2028 Republican Primary?", category: "politics", platform: "polymarket", yesPrice: 0.72, noPrice: 0.28, volume24h: 2_400_000, totalVolume: 45_000_000, endDate: "2028-06-01", createdAt: "2026-01-15", change24h: 2.3, matchedId: "ka-1", sparkline: generateSparkline(0.72, 101) },
+  { id: "ka-1", title: "Trump wins 2028 GOP nomination", category: "politics", platform: "kalshi", yesPrice: 0.67, noPrice: 0.33, volume24h: 1_100_000, totalVolume: 18_000_000, endDate: "2028-06-01", createdAt: "2026-01-20", change24h: 1.8, matchedId: "pm-1", sparkline: generateSparkline(0.67, 102) },
+  { id: "pm-2", title: "Democrats win 2026 Senate majority?", category: "politics", platform: "polymarket", yesPrice: 0.41, noPrice: 0.59, volume24h: 1_800_000, totalVolume: 32_000_000, endDate: "2026-11-03", createdAt: "2025-11-10", change24h: -1.5, matchedId: "ka-2", sparkline: generateSparkline(0.41, 103) },
+  { id: "ka-2", title: "Dems control Senate after 2026 midterms", category: "politics", platform: "kalshi", yesPrice: 0.38, noPrice: 0.62, volume24h: 890_000, totalVolume: 15_000_000, endDate: "2026-11-03", createdAt: "2025-12-01", change24h: -2.1, matchedId: "pm-2", sparkline: generateSparkline(0.38, 104) },
+  { id: "pm-3", title: "Will DeSantis run for President in 2028?", category: "politics", platform: "polymarket", yesPrice: 0.55, noPrice: 0.45, volume24h: 650_000, totalVolume: 8_200_000, endDate: "2027-12-31", createdAt: "2026-02-01", change24h: 3.1, matchedId: "ka-3", sparkline: generateSparkline(0.55, 105) },
+  { id: "ka-3", title: "DeSantis 2028 presidential campaign", category: "politics", platform: "kalshi", yesPrice: 0.49, noPrice: 0.51, volume24h: 320_000, totalVolume: 4_100_000, endDate: "2027-12-31", createdAt: "2026-02-05", change24h: 2.4, matchedId: "pm-3", sparkline: generateSparkline(0.49, 106) },
+  { id: "pm-4", title: "Ukraine ceasefire before July 2026?", category: "politics", platform: "polymarket", yesPrice: 0.23, noPrice: 0.77, volume24h: 1_200_000, totalVolume: 22_000_000, endDate: "2026-07-01", createdAt: "2025-09-15", change24h: -4.2, sparkline: generateSparkline(0.23, 107) },
 
   // Crypto
-  { id: "pm-5", title: "Bitcoin above $150K by Dec 2026?", category: "crypto", platform: "polymarket", yesPrice: 0.34, noPrice: 0.66, volume24h: 3_100_000, totalVolume: 58_000_000, endDate: "2026-12-31", createdAt: "2025-08-01", change24h: 5.2, matchedId: "ka-5", sparkline: generateSparkline(0.34) },
-  { id: "ka-5", title: "BTC price exceeds $150,000 by year-end 2026", category: "crypto", platform: "kalshi", yesPrice: 0.41, noPrice: 0.59, volume24h: 1_500_000, totalVolume: 25_000_000, endDate: "2026-12-31", createdAt: "2025-08-10", change24h: 4.8, matchedId: "pm-5", sparkline: generateSparkline(0.41) },
-  { id: "pm-6", title: "Ethereum above $8K by Dec 2026?", category: "crypto", platform: "polymarket", yesPrice: 0.22, noPrice: 0.78, volume24h: 980_000, totalVolume: 15_000_000, endDate: "2026-12-31", createdAt: "2026-01-05", change24h: -1.3, matchedId: "ka-6", sparkline: generateSparkline(0.22) },
-  { id: "ka-6", title: "ETH above $8,000 end of 2026", category: "crypto", platform: "kalshi", yesPrice: 0.18, noPrice: 0.82, volume24h: 420_000, totalVolume: 6_800_000, endDate: "2026-12-31", createdAt: "2026-01-08", change24h: -0.8, matchedId: "pm-6", sparkline: generateSparkline(0.18) },
-  { id: "pm-7", title: "Solana flips Ethereum market cap in 2026?", category: "crypto", platform: "polymarket", yesPrice: 0.08, noPrice: 0.92, volume24h: 450_000, totalVolume: 5_500_000, endDate: "2026-12-31", createdAt: "2026-01-20", change24h: 1.1, sparkline: generateSparkline(0.08) },
-  { id: "ka-7", title: "Spot Solana ETF approved by SEC in 2026?", category: "crypto", platform: "kalshi", yesPrice: 0.35, noPrice: 0.65, volume24h: 780_000, totalVolume: 9_200_000, endDate: "2026-12-31", createdAt: "2026-01-25", change24h: 6.4, sparkline: generateSparkline(0.35) },
+  { id: "pm-5", title: "Bitcoin above $150K by Dec 2026?", category: "crypto", platform: "polymarket", yesPrice: 0.34, noPrice: 0.66, volume24h: 3_100_000, totalVolume: 58_000_000, endDate: "2026-12-31", createdAt: "2025-08-01", change24h: 5.2, matchedId: "ka-5", sparkline: generateSparkline(0.34, 108) },
+  { id: "ka-5", title: "BTC price exceeds $150,000 by year-end 2026", category: "crypto", platform: "kalshi", yesPrice: 0.41, noPrice: 0.59, volume24h: 1_500_000, totalVolume: 25_000_000, endDate: "2026-12-31", createdAt: "2025-08-10", change24h: 4.8, matchedId: "pm-5", sparkline: generateSparkline(0.41, 109) },
+  { id: "pm-6", title: "Ethereum above $8K by Dec 2026?", category: "crypto", platform: "polymarket", yesPrice: 0.22, noPrice: 0.78, volume24h: 980_000, totalVolume: 15_000_000, endDate: "2026-12-31", createdAt: "2026-01-05", change24h: -1.3, matchedId: "ka-6", sparkline: generateSparkline(0.22, 110) },
+  { id: "ka-6", title: "ETH above $8,000 end of 2026", category: "crypto", platform: "kalshi", yesPrice: 0.18, noPrice: 0.82, volume24h: 420_000, totalVolume: 6_800_000, endDate: "2026-12-31", createdAt: "2026-01-08", change24h: -0.8, matchedId: "pm-6", sparkline: generateSparkline(0.18, 111) },
+  { id: "pm-7", title: "Solana flips Ethereum market cap in 2026?", category: "crypto", platform: "polymarket", yesPrice: 0.08, noPrice: 0.92, volume24h: 450_000, totalVolume: 5_500_000, endDate: "2026-12-31", createdAt: "2026-01-20", change24h: 1.1, sparkline: generateSparkline(0.08, 112) },
+  { id: "ka-7", title: "Spot Solana ETF approved by SEC in 2026?", category: "crypto", platform: "kalshi", yesPrice: 0.35, noPrice: 0.65, volume24h: 780_000, totalVolume: 9_200_000, endDate: "2026-12-31", createdAt: "2026-01-25", change24h: 6.4, sparkline: generateSparkline(0.35, 113) },
 
   // Sports
-  { id: "pm-8", title: "Chiefs win Super Bowl LXI?", category: "sports", platform: "polymarket", yesPrice: 0.15, noPrice: 0.85, volume24h: 520_000, totalVolume: 7_800_000, endDate: "2027-02-14", createdAt: "2026-02-15", change24h: 0.5, matchedId: "ka-8", sparkline: generateSparkline(0.15) },
-  { id: "ka-8", title: "Kansas City Chiefs Super Bowl LXI champions", category: "sports", platform: "kalshi", yesPrice: 0.13, noPrice: 0.87, volume24h: 310_000, totalVolume: 4_200_000, endDate: "2027-02-14", createdAt: "2026-02-18", change24h: 0.3, matchedId: "pm-8", sparkline: generateSparkline(0.13) },
-  { id: "pm-9", title: "Real Madrid wins Champions League 2026?", category: "sports", platform: "polymarket", yesPrice: 0.28, noPrice: 0.72, volume24h: 890_000, totalVolume: 12_000_000, endDate: "2026-06-01", createdAt: "2025-10-01", change24h: -2.1, sparkline: generateSparkline(0.28) },
-  { id: "ka-9", title: "Lakers win 2026 NBA Championship", category: "sports", platform: "kalshi", yesPrice: 0.09, noPrice: 0.91, volume24h: 250_000, totalVolume: 3_100_000, endDate: "2026-06-20", createdAt: "2026-01-10", change24h: -0.4, sparkline: generateSparkline(0.09) },
+  { id: "pm-8", title: "Chiefs win Super Bowl LXI?", category: "sports", platform: "polymarket", yesPrice: 0.15, noPrice: 0.85, volume24h: 520_000, totalVolume: 7_800_000, endDate: "2027-02-14", createdAt: "2026-02-15", change24h: 0.5, matchedId: "ka-8", sparkline: generateSparkline(0.15, 114) },
+  { id: "ka-8", title: "Kansas City Chiefs Super Bowl LXI champions", category: "sports", platform: "kalshi", yesPrice: 0.13, noPrice: 0.87, volume24h: 310_000, totalVolume: 4_200_000, endDate: "2027-02-14", createdAt: "2026-02-18", change24h: 0.3, matchedId: "pm-8", sparkline: generateSparkline(0.13, 115) },
+  { id: "pm-9", title: "Real Madrid wins Champions League 2026?", category: "sports", platform: "polymarket", yesPrice: 0.28, noPrice: 0.72, volume24h: 890_000, totalVolume: 12_000_000, endDate: "2026-06-01", createdAt: "2025-10-01", change24h: -2.1, sparkline: generateSparkline(0.28, 116) },
+  { id: "ka-9", title: "Lakers win 2026 NBA Championship", category: "sports", platform: "kalshi", yesPrice: 0.09, noPrice: 0.91, volume24h: 250_000, totalVolume: 3_100_000, endDate: "2026-06-20", createdAt: "2026-01-10", change24h: -0.4, sparkline: generateSparkline(0.09, 117) },
 
   // Economics
-  { id: "pm-10", title: "Fed cuts rates in June 2026?", category: "economics", platform: "polymarket", yesPrice: 0.62, noPrice: 0.38, volume24h: 1_500_000, totalVolume: 28_000_000, endDate: "2026-06-18", createdAt: "2025-12-20", change24h: 3.4, matchedId: "ka-10", sparkline: generateSparkline(0.62) },
-  { id: "ka-10", title: "FOMC rate cut June 2026 meeting", category: "economics", platform: "kalshi", yesPrice: 0.55, noPrice: 0.45, volume24h: 920_000, totalVolume: 16_000_000, endDate: "2026-06-18", createdAt: "2025-12-22", change24h: 2.8, matchedId: "pm-10", sparkline: generateSparkline(0.55) },
-  { id: "pm-11", title: "US GDP growth above 3% in Q2 2026?", category: "economics", platform: "polymarket", yesPrice: 0.31, noPrice: 0.69, volume24h: 380_000, totalVolume: 4_900_000, endDate: "2026-07-30", createdAt: "2026-01-15", change24h: -1.8, sparkline: generateSparkline(0.31) },
-  { id: "ka-11", title: "US recession by end of 2026?", category: "economics", platform: "kalshi", yesPrice: 0.19, noPrice: 0.81, volume24h: 640_000, totalVolume: 11_000_000, endDate: "2026-12-31", createdAt: "2025-11-01", change24h: 0.7, sparkline: generateSparkline(0.19) },
-  { id: "pm-12", title: "S&P 500 above 6,500 by June 2026?", category: "economics", platform: "polymarket", yesPrice: 0.45, noPrice: 0.55, volume24h: 720_000, totalVolume: 9_800_000, endDate: "2026-06-30", createdAt: "2026-01-02", change24h: 2.1, matchedId: "ka-12", sparkline: generateSparkline(0.45) },
-  { id: "ka-12", title: "S&P 500 closes above 6500 on June 30 2026", category: "economics", platform: "kalshi", yesPrice: 0.42, noPrice: 0.58, volume24h: 510_000, totalVolume: 7_200_000, endDate: "2026-06-30", createdAt: "2026-01-05", change24h: 1.5, matchedId: "pm-12", sparkline: generateSparkline(0.42) },
+  { id: "pm-10", title: "Fed cuts rates in June 2026?", category: "economics", platform: "polymarket", yesPrice: 0.62, noPrice: 0.38, volume24h: 1_500_000, totalVolume: 28_000_000, endDate: "2026-06-18", createdAt: "2025-12-20", change24h: 3.4, matchedId: "ka-10", sparkline: generateSparkline(0.62, 118) },
+  { id: "ka-10", title: "FOMC rate cut June 2026 meeting", category: "economics", platform: "kalshi", yesPrice: 0.55, noPrice: 0.45, volume24h: 920_000, totalVolume: 16_000_000, endDate: "2026-06-18", createdAt: "2025-12-22", change24h: 2.8, matchedId: "pm-10", sparkline: generateSparkline(0.55, 119) },
+  { id: "pm-11", title: "US GDP growth above 3% in Q2 2026?", category: "economics", platform: "polymarket", yesPrice: 0.31, noPrice: 0.69, volume24h: 380_000, totalVolume: 4_900_000, endDate: "2026-07-30", createdAt: "2026-01-15", change24h: -1.8, sparkline: generateSparkline(0.31, 120) },
+  { id: "ka-11", title: "US recession by end of 2026?", category: "economics", platform: "kalshi", yesPrice: 0.19, noPrice: 0.81, volume24h: 640_000, totalVolume: 11_000_000, endDate: "2026-12-31", createdAt: "2025-11-01", change24h: 0.7, sparkline: generateSparkline(0.19, 121) },
+  { id: "pm-12", title: "S&P 500 above 6,500 by June 2026?", category: "economics", platform: "polymarket", yesPrice: 0.45, noPrice: 0.55, volume24h: 720_000, totalVolume: 9_800_000, endDate: "2026-06-30", createdAt: "2026-01-02", change24h: 2.1, matchedId: "ka-12", sparkline: generateSparkline(0.45, 122) },
+  { id: "ka-12", title: "S&P 500 closes above 6500 on June 30 2026", category: "economics", platform: "kalshi", yesPrice: 0.42, noPrice: 0.58, volume24h: 510_000, totalVolume: 7_200_000, endDate: "2026-06-30", createdAt: "2026-01-05", change24h: 1.5, matchedId: "pm-12", sparkline: generateSparkline(0.42, 123) },
 
   // Entertainment / Science
-  { id: "pm-13", title: "GPT-5 released before July 2026?", category: "science", platform: "polymarket", yesPrice: 0.68, noPrice: 0.32, volume24h: 1_100_000, totalVolume: 14_000_000, endDate: "2026-07-01", createdAt: "2025-09-01", change24h: -3.2, sparkline: generateSparkline(0.68) },
-  { id: "ka-13", title: "AI model scores >90% on ARC-AGI by Dec 2026", category: "science", platform: "kalshi", yesPrice: 0.44, noPrice: 0.56, volume24h: 290_000, totalVolume: 3_800_000, endDate: "2026-12-31", createdAt: "2026-02-01", change24h: 4.5, sparkline: generateSparkline(0.44) },
+  { id: "pm-13", title: "GPT-5 released before July 2026?", category: "science", platform: "polymarket", yesPrice: 0.68, noPrice: 0.32, volume24h: 1_100_000, totalVolume: 14_000_000, endDate: "2026-07-01", createdAt: "2025-09-01", change24h: -3.2, sparkline: generateSparkline(0.68, 124) },
+  { id: "ka-13", title: "AI model scores >90% on ARC-AGI by Dec 2026", category: "science", platform: "kalshi", yesPrice: 0.44, noPrice: 0.56, volume24h: 290_000, totalVolume: 3_800_000, endDate: "2026-12-31", createdAt: "2026-02-01", change24h: 4.5, sparkline: generateSparkline(0.44, 125) },
 ];
 
 // ─── Matched Markets ─────────────────────────────────────────────────────────
@@ -203,7 +203,7 @@ const matchPairs: [string, string, string, Category, number, number, number, num
 ];
 
 export const matchedMarkets: MatchedMarket[] = matchPairs.map(([id, title, cat, , polyYes, kalshiYes, polyVol, kalshiVol, confidence]) => {
-  const { history, spreadHistory } = generatePriceHistory(polyYes, kalshiYes);
+  const { history, spreadHistory } = generatePriceHistory(polyYes, kalshiYes, 999);
   return {
     id,
     title,
@@ -236,12 +236,13 @@ export const arbOpportunities: ArbOpportunity[] = [
 
 export const arbHistoricalPerformance: { date: string; cumulativeReturn: number; dailyReturn: number }[] = (() => {
   const data: { date: string; cumulativeReturn: number; dailyReturn: number }[] = [];
+  const btRng = createRng(777);
   let cumulative = 0;
   const now = new Date(2026, 2, 3);
   for (let i = 89; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    const daily = (rng() * 0.8 - 0.1);
+    const daily = (btRng() * 0.8 - 0.1);
     cumulative += daily;
     data.push({
       date: date.toISOString().split("T")[0],
