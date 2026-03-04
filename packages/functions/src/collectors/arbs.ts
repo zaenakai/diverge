@@ -3,24 +3,18 @@
  *
  * For each matched market pair, calculates the price spread.
  * If spread > threshold after fees, records an arb opportunity.
- *
- * Fee structure:
- * - Polymarket: ~2% fee on winnings (not on purchase)
- * - Kalshi: varies by market, typically 1-7% on profit
- *
- * An arb exists when:
- *   buyPrice(platformA) + fees(A) + fees(B) < sellPrice(platformB)
  */
 
-import prisma from "../db.js";
+import { db, schema } from "../../../core/src/db/index.js";
+import { eq, and, isNull } from "drizzle-orm";
 
 // Platform fee estimates (conservative)
 const FEES: Record<string, number> = {
-  polymarket: 0.02, // 2% on winnings
-  kalshi: 0.05, // ~5% average (varies)
+  polymarket: 0.02,
+  kalshi: 0.05,
 };
 
-const MIN_ADJUSTED_SPREAD = 0.01; // 1% minimum to be actionable
+const MIN_ADJUSTED_SPREAD = 0.01;
 
 interface ArbCalc {
   matchId: number;
@@ -36,7 +30,6 @@ function calculateArb(
   polyPrice: number,
   kalshiPrice: number
 ): ArbCalc | null {
-  // Check both directions
   const spreads = [
     {
       buyPlatform: "polymarket",
@@ -57,8 +50,6 @@ function calculateArb(
   for (const s of spreads) {
     if (s.raw <= 0) continue;
 
-    // Adjusted for fees on both sides
-    // Fee is charged on winnings (1 - buyPrice) when you win
     const buyFee = (FEES[s.buyPlatform] ?? 0) * (1 - s.buyPrice);
     const sellFee = (FEES[s.sellPlatform] ?? 0) * (1 - s.sellPrice);
     const adjustedSpread = s.raw - buyFee - sellFee;
@@ -81,28 +72,28 @@ function calculateArb(
 export async function handler() {
   console.log("[ArbDetector] Scanning for arbitrage opportunities...");
 
-  // Fetch all active matched markets with their current prices
-  const matches = await prisma.marketMatch.findMany({
-    where: {
-      marketA: { status: "active" },
-      marketB: { status: "active" },
-    },
-    include: {
-      marketA: { include: { platform: true } },
-      marketB: { include: { platform: true } },
+  // Fetch all active matched markets with prices
+  const matches = await db.query.marketMatches.findMany({
+    with: {
+      marketA: { with: { platform: true } },
+      marketB: { with: { platform: true } },
     },
   });
+
+  // Filter to only active market pairs
+  const activeMatches = matches.filter(
+    (m) => m.marketA.status === "active" && m.marketB.status === "active"
+  );
 
   let arbCount = 0;
   const now = new Date();
 
-  for (const match of matches) {
+  for (const match of activeMatches) {
     const priceA = match.marketA.yesPrice ? Number(match.marketA.yesPrice) : null;
     const priceB = match.marketB.yesPrice ? Number(match.marketB.yesPrice) : null;
 
     if (priceA === null || priceB === null) continue;
 
-    // Determine which is polymarket and which is kalshi
     const polyPrice = match.marketA.platform.slug === "polymarket" ? priceA : priceB;
     const kalshiPrice = match.marketA.platform.slug === "kalshi" ? priceA : priceB;
 
@@ -110,38 +101,46 @@ export async function handler() {
 
     if (arb) {
       // Close any previous open arbs for this match
-      await prisma.arbOpportunity.updateMany({
-        where: { matchId: match.id, closedAt: null },
-        data: { closedAt: now },
-      });
+      await db
+        .update(schema.arbOpportunities)
+        .set({ closedAt: now })
+        .where(
+          and(
+            eq(schema.arbOpportunities.matchId, match.id),
+            isNull(schema.arbOpportunities.closedAt)
+          )
+        );
 
       // Create new arb opportunity
-      await prisma.arbOpportunity.create({
-        data: {
-          matchId: arb.matchId,
-          spreadRaw: arb.spreadRaw,
-          spreadAdjusted: arb.spreadAdjusted,
-          buyPlatform: arb.buyPlatform,
-          buyPrice: arb.buyPrice,
-          sellPrice: arb.sellPrice,
-          volumeMin: Math.min(
-            Number(match.marketA.liquidity ?? 0),
-            Number(match.marketB.liquidity ?? 0)
-          ),
-        },
+      await db.insert(schema.arbOpportunities).values({
+        matchId: arb.matchId,
+        spreadRaw: arb.spreadRaw.toString(),
+        spreadAdjusted: arb.spreadAdjusted.toString(),
+        buyPlatform: arb.buyPlatform,
+        buyPrice: arb.buyPrice.toString(),
+        sellPrice: arb.sellPrice.toString(),
+        volumeMin: Math.min(
+          Number(match.marketA.liquidity ?? 0),
+          Number(match.marketB.liquidity ?? 0)
+        ).toString(),
       });
       arbCount++;
     } else {
-      // No arb — close any stale open opportunities for this match
-      await prisma.arbOpportunity.updateMany({
-        where: { matchId: match.id, closedAt: null },
-        data: { closedAt: now, profitable: false },
-      });
+      // No arb — close any stale open opportunities
+      await db
+        .update(schema.arbOpportunities)
+        .set({ closedAt: now, profitable: false })
+        .where(
+          and(
+            eq(schema.arbOpportunities.matchId, match.id),
+            isNull(schema.arbOpportunities.closedAt)
+          )
+        );
     }
   }
 
-  console.log(`[ArbDetector] Found ${arbCount} arb opportunities from ${matches.length} matched pairs.`);
-  return { arbCount, matchesScanned: matches.length };
+  console.log(`[ArbDetector] Found ${arbCount} arb opportunities from ${activeMatches.length} matched pairs.`);
+  return { arbCount, matchesScanned: activeMatches.length };
 }
 
 export { calculateArb };

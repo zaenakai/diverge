@@ -7,30 +7,37 @@
 
 import * as polymarket from "../../../core/src/platforms/polymarket.js";
 import * as kalshi from "../../../core/src/platforms/kalshi.js";
-import prisma from "../db.js";
+import { db, schema } from "../../../core/src/db/index.js";
+import { eq } from "drizzle-orm";
 
 /** Ensure platform rows exist and return their IDs */
 async function ensurePlatforms(): Promise<{ polymarketId: number; kalshiId: number }> {
   const [pm, kl] = await Promise.all([
-    prisma.platform.upsert({
-      where: { slug: "polymarket" },
-      create: { slug: "polymarket", name: "Polymarket", apiBase: "https://gamma-api.polymarket.com" },
-      update: {},
-    }),
-    prisma.platform.upsert({
-      where: { slug: "kalshi" },
-      create: { slug: "kalshi", name: "Kalshi", apiBase: "https://api.elections.kalshi.com/trade-api/v2" },
-      update: {},
-    }),
+    db
+      .insert(schema.platforms)
+      .values({ slug: "polymarket", name: "Polymarket", apiBase: "https://gamma-api.polymarket.com" })
+      .onConflictDoUpdate({
+        target: schema.platforms.slug,
+        set: { name: "Polymarket" },
+      })
+      .returning({ id: schema.platforms.id }),
+    db
+      .insert(schema.platforms)
+      .values({ slug: "kalshi", name: "Kalshi", apiBase: "https://api.elections.kalshi.com/trade-api/v2" })
+      .onConflictDoUpdate({
+        target: schema.platforms.slug,
+        set: { name: "Kalshi" },
+      })
+      .returning({ id: schema.platforms.id }),
   ]);
-  return { polymarketId: pm.id, kalshiId: kl.id };
+  return { polymarketId: pm[0].id, kalshiId: kl[0].id };
 }
 
 async function collectPolymarket(platformId: number): Promise<number> {
   let count = 0;
   let offset = 0;
   const limit = 100;
-  const maxPages = 50; // cap at 5000 markets per run
+  const maxPages = 50;
 
   while (true) {
     console.log(`[Polymarket] Fetching offset=${offset}...`);
@@ -41,19 +48,17 @@ async function collectPolymarket(platformId: number): Promise<number> {
     for (const market of markets) {
       const prices = polymarket.parsePrices(market);
 
-      await prisma.market.upsert({
-        where: {
-          platformId_externalId: { platformId, externalId: market.id },
-        },
-        create: {
+      await db
+        .insert(schema.markets)
+        .values({
           platformId,
           externalId: market.id,
           title: market.question,
           status: market.closed ? "closed" : "active",
-          yesPrice: prices.yes,
-          noPrice: prices.no,
-          volume24h: parseFloat(market.volume24hr) || 0,
-          liquidity: parseFloat(market.liquidity) || 0,
+          yesPrice: prices.yes?.toString() ?? null,
+          noPrice: prices.no?.toString() ?? null,
+          volume24h: (parseFloat(market.volume24hr) || 0).toString(),
+          liquidity: (parseFloat(market.liquidity) || 0).toString(),
           resolutionDate: market.endDate ? new Date(market.endDate) : null,
           url: `https://polymarket.com/event/${market.slug}`,
           metadata: {
@@ -61,17 +66,20 @@ async function collectPolymarket(platformId: number): Promise<number> {
             clobTokenIds: market.clobTokenIds,
             acceptingOrders: market.acceptingOrders,
           },
-        },
-        update: {
-          title: market.question,
-          status: market.closed ? "closed" : "active",
-          yesPrice: prices.yes,
-          noPrice: prices.no,
-          volume24h: parseFloat(market.volume24hr) || 0,
-          liquidity: parseFloat(market.liquidity) || 0,
-          resolutionDate: market.endDate ? new Date(market.endDate) : null,
-        },
-      });
+        })
+        .onConflictDoUpdate({
+          target: [schema.markets.platformId, schema.markets.externalId],
+          set: {
+            title: market.question,
+            status: market.closed ? "closed" : "active",
+            yesPrice: prices.yes?.toString() ?? null,
+            noPrice: prices.no?.toString() ?? null,
+            volume24h: (parseFloat(market.volume24hr) || 0).toString(),
+            liquidity: (parseFloat(market.liquidity) || 0).toString(),
+            resolutionDate: market.endDate ? new Date(market.endDate) : null,
+            updatedAt: new Date(),
+          },
+        });
       count++;
     }
 
@@ -96,20 +104,18 @@ async function collectKalshi(platformId: number): Promise<number> {
     for (const market of result.markets) {
       const prices = kalshi.getMidPrice(market);
 
-      await prisma.market.upsert({
-        where: {
-          platformId_externalId: { platformId, externalId: market.ticker },
-        },
-        create: {
+      await db
+        .insert(schema.markets)
+        .values({
           platformId,
           externalId: market.ticker,
           title: market.title,
           category: market.category,
           status: market.status === "active" ? "active" : "closed",
-          yesPrice: prices.yes,
-          noPrice: prices.no,
-          volume24h: market.volume_24h,
-          liquidity: market.liquidity,
+          yesPrice: prices.yes?.toString() ?? null,
+          noPrice: prices.no?.toString() ?? null,
+          volume24h: market.volume_24h?.toString() ?? null,
+          liquidity: market.liquidity?.toString() ?? null,
           resolutionDate: new Date(market.expiration_time),
           url: `https://kalshi.com/markets/${market.ticker}`,
           metadata: {
@@ -117,18 +123,21 @@ async function collectKalshi(platformId: number): Promise<number> {
             subtitle: market.subtitle,
             openInterest: market.open_interest,
           },
-        },
-        update: {
-          title: market.title,
-          category: market.category,
-          status: market.status === "active" ? "active" : "closed",
-          yesPrice: prices.yes,
-          noPrice: prices.no,
-          volume24h: market.volume_24h,
-          liquidity: market.liquidity,
-          resolutionDate: new Date(market.expiration_time),
-        },
-      });
+        })
+        .onConflictDoUpdate({
+          target: [schema.markets.platformId, schema.markets.externalId],
+          set: {
+            title: market.title,
+            category: market.category,
+            status: market.status === "active" ? "active" : "closed",
+            yesPrice: prices.yes?.toString() ?? null,
+            noPrice: prices.no?.toString() ?? null,
+            volume24h: market.volume_24h?.toString() ?? null,
+            liquidity: market.liquidity?.toString() ?? null,
+            resolutionDate: new Date(market.expiration_time),
+            updatedAt: new Date(),
+          },
+        });
       count++;
     }
 

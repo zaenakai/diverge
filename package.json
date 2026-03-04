@@ -10,12 +10,10 @@
     "deploy:dev": "sst deploy --stage dev",
     "remove": "sst remove",
     "remove:dev": "sst remove --stage dev",
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:migrate:deploy": "prisma migrate deploy",
-    "db:push": "prisma db push",
-    "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
     "collect:markets": "tsx packages/functions/src/collectors/markets.ts",
     "collect:prices": "tsx packages/functions/src/collectors/prices.ts",
     "collect:matcher": "tsx packages/functions/src/collectors/matcher.ts",
@@ -28,14 +26,13 @@
   },
   "devDependencies": {
     "@types/pg": "^8.18.0",
+    "drizzle-kit": "^0.31.9",
     "sst": "^4.1.8",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.4.2",
-    "@prisma/client": "^7.4.2",
-    "pg": "^8.19.0",
-    "prisma": "^7.4.2"
+    "drizzle-orm": "^0.45.1",
+    "pg": "^8.19.0"
   }
 }

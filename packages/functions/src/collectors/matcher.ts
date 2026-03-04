@@ -7,9 +7,10 @@
 
 import { findMatches } from "../../../core/src/matching.js";
 import type { Market } from "../../../core/src/types.js";
-import prisma from "../db.js";
+import { db, schema } from "../../../core/src/db/index.js";
+import { eq, notInArray, and } from "drizzle-orm";
 
-/** Convert a Prisma market row (with included platform) to the core Market type */
+/** Convert a DB market row (with platform) to the core Market type */
 function toMarketType(row: {
   id: number;
   externalId: string;
@@ -21,10 +22,10 @@ function toMarketType(row: {
   resolvedAt: Date | null;
   outcome: string | null;
   url: string | null;
-  yesPrice: unknown;
-  noPrice: unknown;
-  volume24h: unknown;
-  liquidity: unknown;
+  yesPrice: string | null;
+  noPrice: string | null;
+  volume24h: string | null;
+  liquidity: string | null;
   metadata: unknown;
   createdAt: Date;
   updatedAt: Date;
@@ -55,29 +56,36 @@ function toMarketType(row: {
 export async function handler() {
   console.log("[MarketMatcher] Starting cross-platform matching...");
 
-  // Fetch all active markets that aren't already matched
-  const existingMatchIds = await prisma.marketMatch.findMany({
-    select: { marketAId: true, marketBId: true },
-  });
+  // Fetch all existing match IDs to exclude already-matched markets
+  const existingMatches = await db
+    .select({
+      marketAId: schema.marketMatches.marketAId,
+      marketBId: schema.marketMatches.marketBId,
+    })
+    .from(schema.marketMatches);
+
   const matchedIds = new Set<number>();
-  for (const m of existingMatchIds) {
+  for (const m of existingMatches) {
     matchedIds.add(m.marketAId);
     matchedIds.add(m.marketBId);
   }
 
-  const allActiveMarkets = await prisma.market.findMany({
-    where: {
-      status: "active",
-      id: matchedIds.size > 0 ? { notIn: [...matchedIds] } : undefined,
-    },
-    include: { platform: true },
+  // Build where conditions
+  const conditions = [eq(schema.markets.status, "active")];
+  if (matchedIds.size > 0) {
+    conditions.push(notInArray(schema.markets.id, [...matchedIds]));
+  }
+
+  const allActiveMarkets = await db.query.markets.findMany({
+    where: and(...conditions),
+    with: { platform: true },
   });
 
   const polymarketMarkets: Market[] = [];
   const kalshiMarkets: Market[] = [];
 
   for (const m of allActiveMarkets) {
-    const converted = toMarketType(m);
+    const converted = toMarketType(m as any);
     if (m.platform.slug === "polymarket") {
       polymarketMarkets.push(converted);
     } else if (m.platform.slug === "kalshi") {
@@ -94,25 +102,22 @@ export async function handler() {
 
   let matchCount = 0;
   for (const match of matches) {
-    await prisma.marketMatch.upsert({
-      where: {
-        marketAId_marketBId: {
-          marketAId: match.marketA.id,
-          marketBId: match.marketB.id,
-        },
-      },
-      create: {
+    await db
+      .insert(schema.marketMatches)
+      .values({
         marketAId: match.marketA.id,
         marketBId: match.marketB.id,
         confidence: match.confidence,
         matchMethod: match.method,
         verified: false,
-      },
-      update: {
-        confidence: match.confidence,
-        matchMethod: match.method,
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: [schema.marketMatches.marketAId, schema.marketMatches.marketBId],
+        set: {
+          confidence: match.confidence,
+          matchMethod: match.method,
+        },
+      });
     matchCount++;
   }
 

@@ -13,13 +13,25 @@
  *   GET /whales        — recent large trades
  */
 
-import prisma from "../db.js";
-import { Prisma } from "@prisma/client";
+import { db, schema } from "../../../core/src/db/index.js";
+import {
+  eq,
+  and,
+  or,
+  desc,
+  asc,
+  sql,
+  count,
+  avg,
+  sum,
+  isNull,
+  isNotNull,
+  ilike,
+  gte,
+} from "drizzle-orm";
 
 // ── CORS + Routing ──────────────────────────────────
 
-// Note: Lambda Function URL already adds CORS headers.
-// Do NOT duplicate them here or browsers reject "*, *".
 const HEADERS = {
   "Content-Type": "application/json",
 };
@@ -36,7 +48,6 @@ export async function handler(event: any) {
   try {
     let body: unknown;
 
-    // Order matters — more specific routes first
     if (path === "/accuracy/calibration") {
       body = await getCalibration();
     } else if (path === "/accuracy") {
@@ -65,12 +76,7 @@ export async function handler(event: any) {
     return {
       statusCode: 200,
       headers: HEADERS,
-      body: JSON.stringify(body, (_key, value) =>
-        // Prisma Decimal → number for JSON
-        typeof value === "object" && value !== null && value.constructor?.name === "Decimal"
-          ? Number(value)
-          : value
-      ),
+      body: JSON.stringify(body),
     };
   } catch (err: any) {
     console.error("API error:", err);
@@ -90,15 +96,28 @@ function toNumber(val: string | undefined, fallback: number): number {
   return Number.isFinite(n) ? n : fallback;
 }
 
-/** Convert Prisma Decimal fields to plain numbers for serialization */
-function decimalToNumber(obj: any): any {
+/** Convert string decimal fields to numbers for JSON */
+function numericFields(obj: any): any {
   if (obj === null || obj === undefined) return obj;
   if (typeof obj !== "object") return obj;
-  if (obj.constructor?.name === "Decimal") return Number(obj);
-  if (Array.isArray(obj)) return obj.map(decimalToNumber);
+  if (Array.isArray(obj)) return obj.map(numericFields);
   const result: any = {};
   for (const [key, val] of Object.entries(obj)) {
-    result[key] = decimalToNumber(val);
+    if (
+      typeof val === "string" &&
+      ["yesPrice", "noPrice", "volume24h", "liquidity", "spreadRaw", "spreadAdjusted",
+       "buyPrice", "sellPrice", "volumeMin", "sizeUsd", "price", "finalPrice",
+       "outcome", "brierScore", "yes_price", "no_price", "volume_24h",
+       "spread_raw", "spread_adjusted", "buy_price", "sell_price", "volume_min",
+       "size_usd", "final_price", "brier_score"].includes(key) &&
+      !isNaN(Number(val))
+    ) {
+      result[key] = Number(val);
+    } else if (typeof val === "object" && val !== null) {
+      result[key] = numericFields(val);
+    } else {
+      result[key] = val;
+    }
   }
   return result;
 }
@@ -107,45 +126,46 @@ function decimalToNumber(obj: any): any {
 
 async function getStats() {
   const [
-    totalMarkets,
-    polymarketMarkets,
-    kalshiMarkets,
-    totalMatched,
-    activeArbs,
+    totalMarketsResult,
+    polymarketResult,
+    kalshiResult,
+    totalMatchedResult,
+    activeArbsResult,
     avgBrierResult,
     volume24hResult,
   ] = await Promise.all([
-    prisma.market.count(),
-    prisma.market.count({
-      where: { platform: { slug: "polymarket" } },
-    }),
-    prisma.market.count({
-      where: { platform: { slug: "kalshi" } },
-    }),
-    prisma.marketMatch.count(),
-    prisma.arbOpportunity.count({
-      where: { closedAt: null },
-    }),
-    prisma.accuracyRecord.aggregate({
-      _avg: { brierScore: true },
-    }),
-    prisma.market.aggregate({
-      _sum: { volume24h: true },
-    }),
+    db.select({ count: count() }).from(schema.markets),
+    db
+      .select({ count: count() })
+      .from(schema.markets)
+      .innerJoin(schema.platforms, eq(schema.markets.platformId, schema.platforms.id))
+      .where(eq(schema.platforms.slug, "polymarket")),
+    db
+      .select({ count: count() })
+      .from(schema.markets)
+      .innerJoin(schema.platforms, eq(schema.markets.platformId, schema.platforms.id))
+      .where(eq(schema.platforms.slug, "kalshi")),
+    db.select({ count: count() }).from(schema.marketMatches),
+    db
+      .select({ count: count() })
+      .from(schema.arbOpportunities)
+      .where(isNull(schema.arbOpportunities.closedAt)),
+    db
+      .select({ avg: avg(schema.accuracyRecords.brierScore) })
+      .from(schema.accuracyRecords),
+    db
+      .select({ sum: sum(schema.markets.volume24h) })
+      .from(schema.markets),
   ]);
 
   return {
-    totalMarkets,
-    polymarketMarkets,
-    kalshiMarkets,
-    totalMatched,
-    activeArbs,
-    avgBrierScore: avgBrierResult._avg.brierScore
-      ? Number(avgBrierResult._avg.brierScore)
-      : null,
-    totalVolume24h: volume24hResult._sum.volume24h
-      ? Number(volume24hResult._sum.volume24h)
-      : 0,
+    totalMarkets: totalMarketsResult[0].count,
+    polymarketMarkets: polymarketResult[0].count,
+    kalshiMarkets: kalshiResult[0].count,
+    totalMatched: totalMatchedResult[0].count,
+    activeArbs: activeArbsResult[0].count,
+    avgBrierScore: avgBrierResult[0].avg ? Number(avgBrierResult[0].avg) : null,
+    totalVolume24h: volume24hResult[0].sum ? Number(volume24hResult[0].sum) : 0,
   };
 }
 
@@ -156,40 +176,52 @@ async function getMarkets(params: Record<string, string>) {
   const offset = toNumber(params.offset, 0);
   const { platform, category, status, search } = params;
 
-  const where: Prisma.MarketWhereInput = {};
+  const conditions: any[] = [];
 
   if (platform && platform !== "all") {
-    where.platform = { slug: platform };
+    // Need to join with platforms
   }
   if (category) {
-    where.category = category;
+    conditions.push(eq(schema.markets.category, category));
   }
   if (status) {
-    where.status = status;
+    conditions.push(eq(schema.markets.status, status));
   } else {
-    // Default to active markets
-    where.status = "active";
+    conditions.push(eq(schema.markets.status, "active"));
   }
   if (search) {
-    where.title = { contains: search, mode: "insensitive" };
+    conditions.push(ilike(schema.markets.title, `%${search}%`));
   }
 
-  const [markets, total] = await Promise.all([
-    prisma.market.findMany({
-      where,
-      include: {
-        platform: { select: { slug: true, name: true } },
+  // Use query API for includes
+  const marketsData = await db.query.markets.findMany({
+    where: conditions.length > 0 ? and(...conditions) : undefined,
+    with: {
+      platform: {
+        columns: { slug: true, name: true },
       },
-      orderBy: { volume24h: "desc" },
-      take: limit,
-      skip: offset,
-    }),
-    prisma.market.count({ where }),
-  ]);
+    },
+    orderBy: [desc(schema.markets.volume24h)],
+    limit,
+    offset,
+  });
+
+  // Filter by platform slug if needed (post-query since relational query doesn't support join filtering easily)
+  let filtered = marketsData;
+  if (platform && platform !== "all") {
+    filtered = marketsData.filter((m) => m.platform.slug === platform);
+  }
+
+  // Get total count
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+  const totalResult = await db
+    .select({ count: count() })
+    .from(schema.markets)
+    .where(where);
 
   return {
-    markets: markets.map(decimalToNumber),
-    total,
+    markets: filtered.map(numericFields),
+    total: totalResult[0].count,
     limit,
     offset,
   };
@@ -203,14 +235,14 @@ async function getMarketDetail(id: string) {
     return { error: "Invalid market ID" };
   }
 
-  const market = await prisma.market.findUnique({
-    where: { id: marketId },
-    include: {
-      platform: { select: { slug: true, name: true } },
+  const market = await db.query.markets.findFirst({
+    where: eq(schema.markets.id, marketId),
+    with: {
+      platform: { columns: { slug: true, name: true } },
       priceSnapshots: {
-        orderBy: { recordedAt: "desc" },
-        take: 500,
-        select: {
+        orderBy: [desc(schema.priceSnapshots.recordedAt)],
+        limit: 500,
+        columns: {
           yesPrice: true,
           noPrice: true,
           volume24h: true,
@@ -219,16 +251,16 @@ async function getMarketDetail(id: string) {
         },
       },
       matchesAsA: {
-        include: {
+        with: {
           marketB: {
-            include: { platform: { select: { slug: true, name: true } } },
+            with: { platform: { columns: { slug: true, name: true } } },
           },
         },
       },
       matchesAsB: {
-        include: {
+        with: {
           marketA: {
-            include: { platform: { select: { slug: true, name: true } } },
+            with: { platform: { columns: { slug: true, name: true } } },
           },
         },
       },
@@ -239,28 +271,27 @@ async function getMarketDetail(id: string) {
     return { error: "Market not found" };
   }
 
-  // Combine matches from both sides
   const matches = [
     ...market.matchesAsA.map((m) => ({
       matchId: m.id,
       confidence: m.confidence,
       matchMethod: m.matchMethod,
-      otherMarket: decimalToNumber(m.marketB),
+      otherMarket: numericFields(m.marketB),
     })),
     ...market.matchesAsB.map((m) => ({
       matchId: m.id,
       confidence: m.confidence,
       matchMethod: m.matchMethod,
-      otherMarket: decimalToNumber(m.marketA),
+      otherMarket: numericFields(m.marketA),
     })),
   ];
 
-  const { matchesAsA, matchesAsB, ...marketData } = market;
+  const { matchesAsA, matchesAsB, priceSnapshots, ...marketData } = market;
 
   return {
-    market: decimalToNumber(marketData),
+    market: numericFields(marketData),
     matches,
-    priceHistory: market.priceSnapshots.reverse().map(decimalToNumber),
+    priceHistory: priceSnapshots.reverse().map(numericFields),
   };
 }
 
@@ -269,34 +300,18 @@ async function getMarketDetail(id: string) {
 async function getMatches(params: Record<string, string>) {
   const limit = Math.min(toNumber(params.limit, 50), 200);
   const offset = toNumber(params.offset, 0);
-  const { category } = params;
 
-  const where: Prisma.MarketMatchWhereInput = {};
-
-  if (category) {
-    where.OR = [
-      { marketA: { category } },
-      { marketB: { category } },
-    ];
-  }
-
-  const matches = await prisma.marketMatch.findMany({
-    where,
-    include: {
-      marketA: {
-        include: { platform: { select: { slug: true, name: true } } },
-      },
-      marketB: {
-        include: { platform: { select: { slug: true, name: true } } },
-      },
+  const matchesData = await db.query.marketMatches.findMany({
+    with: {
+      marketA: { with: { platform: { columns: { slug: true, name: true } } } },
+      marketB: { with: { platform: { columns: { slug: true, name: true } } } },
     },
-    orderBy: { confidence: "desc" },
-    take: limit,
-    skip: offset,
+    orderBy: [desc(schema.marketMatches.confidence)],
+    limit,
+    offset,
   });
 
-  // Calculate spread and sort by it
-  const withSpread = matches.map((match) => {
+  const withSpread = matchesData.map((match) => {
     const priceA = match.marketA.yesPrice ? Number(match.marketA.yesPrice) : 0;
     const priceB = match.marketB.yesPrice ? Number(match.marketB.yesPrice) : 0;
     const spread = Math.abs(priceA - priceB);
@@ -307,18 +322,17 @@ async function getMatches(params: Record<string, string>) {
       matchMethod: match.matchMethod,
       verified: match.verified,
       createdAt: match.createdAt,
-      spread: Math.round(spread * 10000) / 100, // as percentage points
-      marketA: decimalToNumber(match.marketA),
-      marketB: decimalToNumber(match.marketB),
+      spread: Math.round(spread * 10000) / 100,
+      marketA: numericFields(match.marketA),
+      marketB: numericFields(match.marketB),
     };
   });
 
-  // Sort by spread descending (biggest arbs first)
   withSpread.sort((a, b) => b.spread - a.spread);
 
-  const total = await prisma.marketMatch.count({ where });
+  const totalResult = await db.select({ count: count() }).from(schema.marketMatches);
 
-  return { matches: withSpread, total, limit, offset };
+  return { matches: withSpread, total: totalResult[0].count, limit, offset };
 }
 
 // ── GET /arbs ───────────────────────────────────────
@@ -326,67 +340,47 @@ async function getMatches(params: Record<string, string>) {
 async function getArbs(params: Record<string, string>) {
   const limit = Math.min(toNumber(params.limit, 50), 200);
   const offset = toNumber(params.offset, 0);
-  const minSpread = toNumber(params.min_spread, 0) / 100; // convert percentage to decimal
-  const { category, direction } = params;
+  const minSpread = toNumber(params.min_spread, 0) / 100;
+  const { direction } = params;
 
-  const where: Prisma.ArbOpportunityWhereInput = {
-    closedAt: null, // only active arbs
-  };
+  const conditions: any[] = [isNull(schema.arbOpportunities.closedAt)];
 
   if (minSpread > 0) {
-    where.spreadRaw = { gte: minSpread };
+    conditions.push(gte(schema.arbOpportunities.spreadRaw, minSpread.toString()));
   }
 
-  if (category) {
-    where.match = {
-      OR: [
-        { marketA: { category } },
-        { marketB: { category } },
-      ],
-    };
-  }
-
-  const arbs = await prisma.arbOpportunity.findMany({
-    where,
-    include: {
+  const arbs = await db.query.arbOpportunities.findMany({
+    where: and(...conditions),
+    with: {
       match: {
-        include: {
-          marketA: {
-            include: { platform: { select: { slug: true, name: true } } },
-          },
-          marketB: {
-            include: { platform: { select: { slug: true, name: true } } },
-          },
+        with: {
+          marketA: { with: { platform: { columns: { slug: true, name: true } } } },
+          marketB: { with: { platform: { columns: { slug: true, name: true } } } },
         },
       },
     },
-    orderBy: { spreadAdjusted: "desc" },
-    take: limit,
-    skip: offset,
+    orderBy: [desc(schema.arbOpportunities.spreadAdjusted)],
+    limit,
+    offset,
   });
 
-  // Filter by direction (widening/narrowing) post-query if needed
-  let results = arbs.map((arb) => {
-    const matchData = arb.match;
-    return {
-      id: arb.id,
-      matchId: arb.matchId,
-      spreadRaw: arb.spreadRaw ? Number(arb.spreadRaw) : null,
-      spreadAdjusted: arb.spreadAdjusted ? Number(arb.spreadAdjusted) : null,
-      buyPlatform: arb.buyPlatform,
-      buyPrice: arb.buyPrice ? Number(arb.buyPrice) : null,
-      sellPrice: arb.sellPrice ? Number(arb.sellPrice) : null,
-      volumeMin: arb.volumeMin ? Number(arb.volumeMin) : null,
-      detectedAt: arb.detectedAt,
-      closedAt: arb.closedAt,
-      profitable: arb.profitable,
-      marketA: decimalToNumber(matchData.marketA),
-      marketB: decimalToNumber(matchData.marketB),
-      confidence: matchData.confidence,
-    };
-  });
+  let results = arbs.map((arb) => ({
+    id: arb.id,
+    matchId: arb.matchId,
+    spreadRaw: arb.spreadRaw ? Number(arb.spreadRaw) : null,
+    spreadAdjusted: arb.spreadAdjusted ? Number(arb.spreadAdjusted) : null,
+    buyPlatform: arb.buyPlatform,
+    buyPrice: arb.buyPrice ? Number(arb.buyPrice) : null,
+    sellPrice: arb.sellPrice ? Number(arb.sellPrice) : null,
+    volumeMin: arb.volumeMin ? Number(arb.volumeMin) : null,
+    detectedAt: arb.detectedAt,
+    closedAt: arb.closedAt,
+    profitable: arb.profitable,
+    marketA: numericFields(arb.match.marketA),
+    marketB: numericFields(arb.match.marketB),
+    confidence: arb.match.confidence,
+  }));
 
-  // Direction filter: compare current spread to spread at detection
   if (direction === "widening" || direction === "narrowing") {
     results = results.filter((arb) => {
       const currentSpread = arb.spreadRaw ?? 0;
@@ -398,9 +392,12 @@ async function getArbs(params: Record<string, string>) {
     });
   }
 
-  const total = await prisma.arbOpportunity.count({ where });
+  const totalResult = await db
+    .select({ count: count() })
+    .from(schema.arbOpportunities)
+    .where(and(...conditions));
 
-  return { arbs: results, total, limit, offset };
+  return { arbs: results, total: totalResult[0].count, limit, offset };
 }
 
 // ── GET /accuracy ───────────────────────────────────
@@ -408,18 +405,20 @@ async function getArbs(params: Record<string, string>) {
 async function getAccuracy(params: Record<string, string>) {
   const { platform: platformFilter } = params;
 
-  // Overall stats per platform
-  const platformStats = await prisma.accuracyRecord.groupBy({
-    by: ["platformId"],
-    _avg: { brierScore: true },
-    _count: { id: true },
-  });
+  // Overall stats per platform using raw SQL for groupBy with aggregates
+  const platformStats = await db
+    .select({
+      platformId: schema.accuracyRecords.platformId,
+      avgBrier: avg(schema.accuracyRecords.brierScore),
+      total: count(schema.accuracyRecords.id),
+    })
+    .from(schema.accuracyRecords)
+    .groupBy(schema.accuracyRecords.platformId);
 
-  // Resolve platform names
-  const platforms = await prisma.platform.findMany({
-    select: { id: true, slug: true, name: true },
-  });
-  const platformMap = new Map(platforms.map((p) => [p.id, p]));
+  const allPlatforms = await db
+    .select({ id: schema.platforms.id, slug: schema.platforms.slug, name: schema.platforms.name })
+    .from(schema.platforms);
+  const platformMap = new Map(allPlatforms.map((p) => [p.id, p]));
 
   const byPlatform = platformStats.map((stat) => {
     const plat = platformMap.get(stat.platformId);
@@ -427,19 +426,22 @@ async function getAccuracy(params: Record<string, string>) {
       platformId: stat.platformId,
       slug: plat?.slug ?? "unknown",
       name: plat?.name ?? "Unknown",
-      avgBrierScore: stat._avg.brierScore ? Number(stat._avg.brierScore) : null,
-      totalResolved: stat._count.id,
+      avgBrierScore: stat.avgBrier ? Number(stat.avgBrier) : null,
+      totalResolved: stat.total,
     };
   });
 
   // By category
-  const categoryStats = await prisma.accuracyRecord.groupBy({
-    by: ["category", "platformId"],
-    _avg: { brierScore: true },
-    _count: { id: true },
-  });
+  const categoryStats = await db
+    .select({
+      category: schema.accuracyRecords.category,
+      platformId: schema.accuracyRecords.platformId,
+      avgBrier: avg(schema.accuracyRecords.brierScore),
+      total: count(schema.accuracyRecords.id),
+    })
+    .from(schema.accuracyRecords)
+    .groupBy(schema.accuracyRecords.category, schema.accuracyRecords.platformId);
 
-  // Group by category, with per-platform scores
   const categoryMap = new Map<
     string,
     { category: string; platforms: Record<string, { avg: number; count: number }> }
@@ -454,33 +456,38 @@ async function getAccuracy(params: Record<string, string>) {
       categoryMap.set(cat, { category: cat, platforms: {} });
     }
     categoryMap.get(cat)!.platforms[slug] = {
-      avg: stat._avg.brierScore ? Number(stat._avg.brierScore) : 0,
-      count: stat._count.id,
+      avg: stat.avgBrier ? Number(stat.avgBrier) : 0,
+      count: stat.total,
     };
   }
 
   // Notable misses (worst Brier scores)
-  const notableMissesWhere: Prisma.AccuracyRecordWhereInput = {
-    brierScore: { not: null },
-  };
-  if (platformFilter && platformFilter !== "all") {
-    notableMissesWhere.platform = { slug: platformFilter };
-  }
+  const missConditions: any[] = [isNotNull(schema.accuracyRecords.brierScore)];
 
-  const notableMisses = await prisma.accuracyRecord.findMany({
-    where: notableMissesWhere,
-    orderBy: { brierScore: "desc" },
-    take: 20,
-    include: {
-      market: { select: { title: true, category: true, outcome: true } },
-      platform: { select: { slug: true, name: true } },
+  const notableMisses = await db.query.accuracyRecords.findMany({
+    where: and(...missConditions),
+    orderBy: [desc(schema.accuracyRecords.brierScore)],
+    limit: 20,
+    with: {
+      market: {
+        columns: { title: true, category: true, outcome: true },
+      },
+      platform: {
+        columns: { slug: true, name: true },
+      },
     },
   });
+
+  // Filter by platform post-query if needed
+  let filteredMisses = notableMisses;
+  if (platformFilter && platformFilter !== "all") {
+    filteredMisses = notableMisses.filter((m) => m.platform.slug === platformFilter);
+  }
 
   return {
     byPlatform,
     byCategory: Array.from(categoryMap.values()),
-    notableMisses: notableMisses.map((m) => ({
+    notableMisses: filteredMisses.map((m) => ({
       id: m.id,
       marketTitle: m.market.title,
       category: m.market.category,
@@ -496,25 +503,25 @@ async function getAccuracy(params: Record<string, string>) {
 // ── GET /accuracy/calibration ───────────────────────
 
 async function getCalibration() {
-  // Get all accuracy records with final prices
-  const records = await prisma.accuracyRecord.findMany({
-    where: {
-      finalPrice: { not: null },
-      outcome: { not: null },
-    },
-    select: {
-      finalPrice: true,
-      outcome: true,
-      platformId: true,
-    },
-  });
+  const records = await db
+    .select({
+      finalPrice: schema.accuracyRecords.finalPrice,
+      outcome: schema.accuracyRecords.outcome,
+      platformId: schema.accuracyRecords.platformId,
+    })
+    .from(schema.accuracyRecords)
+    .where(
+      and(
+        isNotNull(schema.accuracyRecords.finalPrice),
+        isNotNull(schema.accuracyRecords.outcome)
+      )
+    );
 
-  const platforms = await prisma.platform.findMany({
-    select: { id: true, slug: true },
-  });
-  const platformMap = new Map(platforms.map((p) => [p.id, p.slug]));
+  const allPlatforms = await db
+    .select({ id: schema.platforms.id, slug: schema.platforms.slug })
+    .from(schema.platforms);
+  const platformMap = new Map(allPlatforms.map((p) => [p.id, p.slug]));
 
-  // Bucket into 10% ranges: 0-10%, 10-20%, ..., 90-100%
   const buckets: Map<
     number,
     {
@@ -524,11 +531,8 @@ async function getCalibration() {
   > = new Map();
 
   for (let i = 0; i < 10; i++) {
-    const midpoint = (i * 10 + 5) / 100; // 0.05, 0.15, 0.25, ...
-    buckets.set(i, {
-      predicted: midpoint,
-      outcomes: {},
-    });
+    const midpoint = (i * 10 + 5) / 100;
+    buckets.set(i, { predicted: midpoint, outcomes: {} });
   }
 
   for (const record of records) {
@@ -568,20 +572,21 @@ async function getWhales(params: Record<string, string>) {
   const limit = Math.min(toNumber(params.limit, 50), 200);
   const offset = toNumber(params.offset, 0);
 
-  const [trades, total] = await Promise.all([
-    prisma.whaleTrade.findMany({
-      orderBy: { sizeUsd: "desc" },
-      take: limit,
-      skip: offset,
-      include: {
-        market: {
-          select: { id: true, title: true, category: true, yesPrice: true, noPrice: true },
-        },
-        platform: { select: { slug: true, name: true } },
+  const trades = await db.query.whaleTrades.findMany({
+    orderBy: [desc(schema.whaleTrades.sizeUsd)],
+    limit,
+    offset,
+    with: {
+      market: {
+        columns: { id: true, title: true, category: true, yesPrice: true, noPrice: true },
       },
-    }),
-    prisma.whaleTrade.count(),
-  ]);
+      platform: {
+        columns: { slug: true, name: true },
+      },
+    },
+  });
+
+  const totalResult = await db.select({ count: count() }).from(schema.whaleTrades);
 
   return {
     trades: trades.map((t) => ({
@@ -597,7 +602,7 @@ async function getWhales(params: Record<string, string>) {
       platformName: t.platform.name,
       detectedAt: t.detectedAt,
     })),
-    total,
+    total: totalResult[0].count,
     limit,
     offset,
   };

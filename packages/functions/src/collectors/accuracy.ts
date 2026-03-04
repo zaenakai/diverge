@@ -6,14 +6,13 @@
  *
  * Brier Score = (forecast - outcome)^2
  * - 0.0 = perfect prediction
- * - 0.25 = coin flip (50% on everything)
+ * - 0.25 = coin flip
  * - 1.0 = perfectly wrong
- *
- * Lower is better.
  */
 
 import type { CalibrationPoint } from "../../../core/src/types.js";
-import prisma from "../db.js";
+import { db, schema } from "../../../core/src/db/index.js";
+import { eq, and, isNotNull, desc, lte, sql } from "drizzle-orm";
 
 function brierScore(forecast: number, outcome: number): number {
   return (forecast - outcome) ** 2;
@@ -22,7 +21,6 @@ function brierScore(forecast: number, outcome: number): number {
 function buildCalibrationCurve(records: { forecast: number; outcome: number }[]): CalibrationPoint[] {
   const buckets: Map<number, { forecasts: number[]; outcomes: number[] }> = new Map();
 
-  // Create buckets: 0.05, 0.15, 0.25, ..., 0.95
   for (let i = 0.05; i <= 0.95; i += 0.1) {
     buckets.set(Math.round(i * 100) / 100, { forecasts: [], outcomes: [] });
   }
@@ -55,37 +53,51 @@ function buildCalibrationCurve(records: { forecast: number; outcome: number }[])
 export async function handler() {
   console.log("[AccuracyCalculator] Calculating accuracy scores...");
 
-  // Find recently resolved markets that don't have accuracy records yet
-  const resolvedMarkets = await prisma.market.findMany({
-    where: {
-      status: "resolved",
-      outcome: { not: null },
-      resolvedAt: { not: null },
-      accuracyRecords: { none: {} },
-    },
-    include: { platform: true },
+  // Find resolved markets that don't have accuracy records yet
+  // Use a subquery approach: get resolved markets, then filter out those with records
+  const resolvedMarkets = await db.query.markets.findMany({
+    where: and(
+      eq(schema.markets.status, "resolved"),
+      isNotNull(schema.markets.outcome),
+      isNotNull(schema.markets.resolvedAt)
+    ),
+    with: { platform: true },
   });
 
-  if (resolvedMarkets.length === 0) {
+  // Get all existing accuracy record market IDs
+  const existingRecords = await db
+    .select({ marketId: schema.accuracyRecords.marketId })
+    .from(schema.accuracyRecords);
+  const scoredMarketIds = new Set(existingRecords.map((r) => r.marketId));
+
+  // Filter to only unscored markets
+  const unscoredMarkets = resolvedMarkets.filter((m) => !scoredMarketIds.has(m.id));
+
+  if (unscoredMarkets.length === 0) {
     console.log("[AccuracyCalculator] No new resolved markets to score.");
     return { scored: 0 };
   }
 
   let scored = 0;
 
-  for (const market of resolvedMarkets) {
+  for (const market of unscoredMarkets) {
     // Get the last price snapshot before resolution
-    const lastSnapshot = await prisma.priceSnapshot.findFirst({
-      where: {
-        marketId: market.id,
-        recordedAt: { lte: market.resolvedAt! },
-      },
-      orderBy: { recordedAt: "desc" },
-    });
+    const lastSnapshot = await db
+      .select({
+        yesPrice: schema.priceSnapshots.yesPrice,
+      })
+      .from(schema.priceSnapshots)
+      .where(
+        and(
+          eq(schema.priceSnapshots.marketId, market.id),
+          lte(schema.priceSnapshots.recordedAt, market.resolvedAt!)
+        )
+      )
+      .orderBy(desc(schema.priceSnapshots.recordedAt))
+      .limit(1);
 
-    // Fall back to the market's own yesPrice if no snapshot exists
-    const finalPrice = lastSnapshot?.yesPrice
-      ? Number(lastSnapshot.yesPrice)
+    const finalPrice = lastSnapshot[0]?.yesPrice
+      ? Number(lastSnapshot[0].yesPrice)
       : market.yesPrice
         ? Number(market.yesPrice)
         : null;
@@ -95,28 +107,25 @@ export async function handler() {
     const outcomeNum = market.outcome === "yes" ? 1 : 0;
     const score = brierScore(finalPrice, outcomeNum);
 
-    await prisma.accuracyRecord.upsert({
-      where: {
-        marketId_platformId: {
-          marketId: market.id,
-          platformId: market.platformId,
-        },
-      },
-      create: {
+    await db
+      .insert(schema.accuracyRecords)
+      .values({
         marketId: market.id,
         platformId: market.platformId,
         category: market.category,
-        finalPrice,
-        outcome: outcomeNum,
-        brierScore: score,
+        finalPrice: finalPrice.toString(),
+        outcome: outcomeNum.toString(),
+        brierScore: score.toString(),
         resolvedAt: market.resolvedAt,
-      },
-      update: {
-        finalPrice,
-        outcome: outcomeNum,
-        brierScore: score,
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: [schema.accuracyRecords.marketId, schema.accuracyRecords.platformId],
+        set: {
+          finalPrice: finalPrice.toString(),
+          outcome: outcomeNum.toString(),
+          brierScore: score.toString(),
+        },
+      });
     scored++;
   }
 

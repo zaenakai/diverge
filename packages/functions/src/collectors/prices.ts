@@ -2,32 +2,32 @@
  * Price Collector — runs every minute
  *
  * Snapshots current prices for all active markets into price_snapshots.
- * Focuses on matched markets first, then all active markets.
  */
 
-import prisma from "../db.js";
+import { db, schema } from "../../../core/src/db/index.js";
+import { eq } from "drizzle-orm";
 
 export async function handler() {
   console.log("[PriceCollector] Starting price snapshot...");
 
   // Fetch all active markets with their current prices
-  const activeMarkets = await prisma.market.findMany({
-    where: { status: "active" },
-    select: {
-      id: true,
-      yesPrice: true,
-      noPrice: true,
-      volume24h: true,
-      liquidity: true,
-    },
-  });
+  const activeMarkets = await db
+    .select({
+      id: schema.markets.id,
+      yesPrice: schema.markets.yesPrice,
+      noPrice: schema.markets.noPrice,
+      volume24h: schema.markets.volume24h,
+      liquidity: schema.markets.liquidity,
+    })
+    .from(schema.markets)
+    .where(eq(schema.markets.status, "active"));
 
   if (activeMarkets.length === 0) {
     console.log("[PriceCollector] No active markets found.");
     return { snapshotCount: 0 };
   }
 
-  // Batch insert price snapshots
+  // Filter and build snapshot rows
   const snapshots = activeMarkets
     .filter((m) => m.yesPrice !== null || m.noPrice !== null)
     .map((m) => ({
@@ -38,10 +38,14 @@ export async function handler() {
       liquidity: m.liquidity,
     }));
 
-  const result = await prisma.priceSnapshot.createMany({
-    data: snapshots,
-  });
+  if (snapshots.length === 0) {
+    console.log("[PriceCollector] No markets with prices to snapshot.");
+    return { snapshotCount: 0 };
+  }
 
-  console.log(`[PriceCollector] Done. Snapshotted ${result.count} markets.`);
-  return { snapshotCount: result.count };
+  // Batch insert price snapshots
+  await db.insert(schema.priceSnapshots).values(snapshots);
+
+  console.log(`[PriceCollector] Done. Snapshotted ${snapshots.length} markets.`);
+  return { snapshotCount: snapshots.length };
 }
