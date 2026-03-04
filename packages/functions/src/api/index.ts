@@ -18,11 +18,10 @@ import { Prisma } from "@prisma/client";
 
 // ── CORS + Routing ──────────────────────────────────
 
+// Note: Lambda Function URL already adds CORS headers.
+// Do NOT duplicate them here or browsers reject "*, *".
 const HEADERS = {
   "Content-Type": "application/json",
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
 export async function handler(event: any) {
