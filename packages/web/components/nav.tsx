@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -25,9 +26,7 @@ export function Nav() {
         <div className="flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center font-bold text-sm text-black">
-              ◇
-            </div>
+            <Image src="/favicon-src.png" alt="Diverge" width={32} height={32} className="rounded-lg" />
             <span className="font-bold text-lg tracking-tight">diverge</span>
             <span className="text-[10px] text-white/30 uppercase tracking-widest ml-1">Beta</span>
           </Link>

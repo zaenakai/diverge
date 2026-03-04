@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <!-- Left half (blue) with gap -->
+  <polygon points="100,10 15,100 100,190 100,115 60,100 100,85" fill="#3b82f6" opacity="0.9"/>
+  <!-- Right half (orange) with gap -->
+  <polygon points="100,10 185,100 100,190 100,115 140,100 100,85" fill="#f97316" opacity="0.9"/>
+  <!-- Center gap creates the "diverge" -->
+</svg>
