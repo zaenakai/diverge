@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import * as schema from "../../core/src/db/schema";
+import * as schema from "./schema";
 
 export { schema };
 export { eq, and, or, desc, asc, sql, count, avg, sum, isNull, isNotNull, ilike, gte } from "drizzle-orm";

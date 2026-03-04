@@ -3,7 +3,7 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import Google from "next-auth/providers/google";
 import GitHub from "next-auth/providers/github";
 import { db } from "./db";
-import * as schema from "../../core/src/db/schema";
+import * as schema from "./schema";
 import { eq } from "drizzle-orm";
 import type { DefaultSession } from "next-auth";
 
