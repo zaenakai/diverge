@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
   }
 
   const userRows = await db
-    .select({ email: schema.users.email, stripeCustomerId: schema.users.stripeCustomerId })
+    .select()
     .from(schema.users)
     .where(eq(schema.users.id, session.user.id))
     .limit(1);
