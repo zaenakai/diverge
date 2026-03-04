@@ -118,6 +118,8 @@ export default $config({
         googleClientSecret,
         githubClientId,
         githubClientSecret,
+        stripeSecretKey,
+        stripeWebhookSecret,
       ],
       environment: {
         NEXT_PUBLIC_API_URL: api.url,

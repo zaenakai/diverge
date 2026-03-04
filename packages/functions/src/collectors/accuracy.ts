@@ -2,7 +2,7 @@
  * Accuracy Calculator — runs daily at midnight UTC
  *
  * Checks for newly resolved markets, calculates Brier scores,
- * updates accuracy leaderboard.
+ * updates accuracy records.
  *
  * Brier Score = (forecast - outcome)^2
  * - 0.0 = perfect prediction
@@ -12,15 +12,8 @@
  * Lower is better.
  */
 
-import type { Platform, CalibrationPoint } from "@diverge/core/types.js";
-
-interface ResolvedMarket {
-  id: number;
-  platform: Platform;
-  category?: string;
-  lastYesPrice: number; // final price before resolution
-  outcome: number; // 1 = yes, 0 = no
-}
+import type { CalibrationPoint } from "@diverge/core/types.js";
+import prisma from "../db.js";
 
 function brierScore(forecast: number, outcome: number): number {
   return (forecast - outcome) ** 2;
@@ -35,7 +28,6 @@ function buildCalibrationCurve(records: { forecast: number; outcome: number }[])
   }
 
   for (const r of records) {
-    // Find nearest bucket
     const bucket = Math.round(Math.round(r.forecast * 10) / 10 * 100) / 100;
     const key = Math.max(0.05, Math.min(0.95, bucket));
     const b = buckets.get(key);
@@ -63,16 +55,73 @@ function buildCalibrationCurve(records: { forecast: number; outcome: number }[])
 export async function handler() {
   console.log("[AccuracyCalculator] Calculating accuracy scores...");
 
-  // TODO:
-  // 1. Fetch recently resolved markets (last 24h) from both platforms
-  // 2. For each, get the last price snapshot before resolution
-  // 3. Calculate Brier score
-  // 4. Store accuracy_record
-  // 5. Rebuild calibration curves by platform + category
-  // 6. Update accuracy_summary cache
+  // Find recently resolved markets that don't have accuracy records yet
+  const resolvedMarkets = await prisma.market.findMany({
+    where: {
+      status: "resolved",
+      outcome: { not: null },
+      resolvedAt: { not: null },
+      accuracyRecords: { none: {} },
+    },
+    include: { platform: true },
+  });
 
-  console.log("[AccuracyCalculator] Done.");
-  return { status: "ok" };
+  if (resolvedMarkets.length === 0) {
+    console.log("[AccuracyCalculator] No new resolved markets to score.");
+    return { scored: 0 };
+  }
+
+  let scored = 0;
+
+  for (const market of resolvedMarkets) {
+    // Get the last price snapshot before resolution
+    const lastSnapshot = await prisma.priceSnapshot.findFirst({
+      where: {
+        marketId: market.id,
+        recordedAt: { lte: market.resolvedAt! },
+      },
+      orderBy: { recordedAt: "desc" },
+    });
+
+    // Fall back to the market's own yesPrice if no snapshot exists
+    const finalPrice = lastSnapshot?.yesPrice
+      ? Number(lastSnapshot.yesPrice)
+      : market.yesPrice
+        ? Number(market.yesPrice)
+        : null;
+
+    if (finalPrice === null) continue;
+
+    const outcomeNum = market.outcome === "yes" ? 1 : 0;
+    const score = brierScore(finalPrice, outcomeNum);
+
+    await prisma.accuracyRecord.upsert({
+      where: {
+        marketId_platformId: {
+          marketId: market.id,
+          platformId: market.platformId,
+        },
+      },
+      create: {
+        marketId: market.id,
+        platformId: market.platformId,
+        category: market.category,
+        finalPrice,
+        outcome: outcomeNum,
+        brierScore: score,
+        resolvedAt: market.resolvedAt,
+      },
+      update: {
+        finalPrice,
+        outcome: outcomeNum,
+        brierScore: score,
+      },
+    });
+    scored++;
+  }
+
+  console.log(`[AccuracyCalculator] Scored ${scored} resolved markets.`);
+  return { scored };
 }
 
 export { brierScore, buildCalibrationCurve };

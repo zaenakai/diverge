@@ -1,20 +1,47 @@
 /**
  * Price Collector — runs every minute
  *
- * Snapshots current prices for all matched/active markets.
- * This is the high-frequency table — partitioned by month.
+ * Snapshots current prices for all active markets into price_snapshots.
+ * Focuses on matched markets first, then all active markets.
  */
+
+import prisma from "../db.js";
 
 export async function handler() {
   console.log("[PriceCollector] Starting price snapshot...");
 
-  // TODO: Query all active markets from DB
-  // For each market, fetch current price from platform API
-  // Insert price_snapshot row
+  // Fetch all active markets with their current prices
+  const activeMarkets = await prisma.market.findMany({
+    where: { status: "active" },
+    select: {
+      id: true,
+      yesPrice: true,
+      noPrice: true,
+      volume24h: true,
+      liquidity: true,
+    },
+  });
 
-  // For matched markets, we need both prices fresh
-  // to calculate real-time spreads
+  if (activeMarkets.length === 0) {
+    console.log("[PriceCollector] No active markets found.");
+    return { snapshotCount: 0 };
+  }
 
-  console.log("[PriceCollector] Done.");
-  return { status: "ok" };
+  // Batch insert price snapshots
+  const snapshots = activeMarkets
+    .filter((m) => m.yesPrice !== null || m.noPrice !== null)
+    .map((m) => ({
+      marketId: m.id,
+      yesPrice: m.yesPrice,
+      noPrice: m.noPrice,
+      volume24h: m.volume24h,
+      liquidity: m.liquidity,
+    }));
+
+  const result = await prisma.priceSnapshot.createMany({
+    data: snapshots,
+  });
+
+  console.log(`[PriceCollector] Done. Snapshotted ${result.count} markets.`);
+  return { snapshotCount: result.count };
 }

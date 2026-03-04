@@ -1,15 +1,21 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import {
-  explorerMarkets,
+  explorerMarkets as mockExplorerMarkets,
   formatUsd,
   categoryColors,
   type ExplorerMarket,
   type Category,
 } from "@/lib/mock-data";
+import {
+  getMarkets as apiGetMarkets,
+  getMatches as apiGetMatches,
+  type ApiMarket,
+  type MatchedMarketPair,
+} from "@/lib/api";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -47,6 +53,45 @@ const sortOptions: { value: SortType; label: string }[] = [
 
 function formatPercent(price: number): string {
   return `${Math.round(price * 100)}¢`;
+}
+
+// ── Transform API data → ExplorerMarket format ──────
+
+function apiMarketToExplorer(market: ApiMarket): ExplorerMarket {
+  return {
+    id: String(market.id),
+    title: market.title,
+    category: (market.category ?? "science") as Category,
+    matched: false,
+    platform: market.platform.slug as "polymarket" | "kalshi",
+    yesPrice: market.yesPrice ?? 0,
+    change24h: 0, // not available from single market endpoint
+    volume24h: market.volume24h ?? 0,
+    totalVolume: market.volume24h ?? 0, // API doesn't track total separately
+    endDate: market.resolutionDate ?? "",
+  };
+}
+
+function matchToExplorer(match: MatchedMarketPair): ExplorerMarket {
+  const isAPolymarket = match.marketA.platform.slug === "polymarket";
+  const polyMarket = isAPolymarket ? match.marketA : match.marketB;
+  const kalshiMarket = isAPolymarket ? match.marketB : match.marketA;
+
+  return {
+    id: `match-${match.id}`,
+    title: polyMarket.title || kalshiMarket.title,
+    category: ((polyMarket.category ?? kalshiMarket.category) ?? "science") as Category,
+    matched: true,
+    polymarketPrice: polyMarket.yesPrice ?? undefined,
+    kalshiPrice: kalshiMarket.yesPrice ?? undefined,
+    spread: match.spread,
+    polyVolume24h: polyMarket.volume24h ?? undefined,
+    kalshiVolume24h: kalshiMarket.volume24h ?? undefined,
+    change24h: 0,
+    volume24h: (polyMarket.volume24h ?? 0) + (kalshiMarket.volume24h ?? 0),
+    totalVolume: (polyMarket.volume24h ?? 0) + (kalshiMarket.volume24h ?? 0),
+    endDate: polyMarket.resolutionDate ?? kalshiMarket.resolutionDate ?? "",
+  };
 }
 
 // ─── Matched Market Card ─────────────────────────────────────────────────────
@@ -203,10 +248,60 @@ export default function MarketsPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
   const [sort, setSort] = useState<SortType>("volume");
+  const [allMarkets, setAllMarkets] = useState<ExplorerMarket[]>(mockExplorerMarkets);
+  const [dataSource, setDataSource] = useState<"mock" | "api">("mock");
+  const [loading, setLoading] = useState(true);
+
+  // Fetch real data on mount, fall back to mock
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchData() {
+      try {
+        const [marketsRes, matchesRes] = await Promise.all([
+          apiGetMarkets({ limit: 200 }),
+          apiGetMatches({ limit: 200 }),
+        ]);
+
+        if (cancelled) return;
+
+        // Build matched market IDs to exclude from singles
+        const matchedMarketIds = new Set<number>();
+        const matchedExplorer: ExplorerMarket[] = [];
+
+        for (const match of matchesRes.matches) {
+          matchedMarketIds.add(match.marketA.id);
+          matchedMarketIds.add(match.marketB.id);
+          matchedExplorer.push(matchToExplorer(match));
+        }
+
+        // Convert remaining markets to single-platform cards
+        const singleExplorer: ExplorerMarket[] = marketsRes.markets
+          .filter((m) => !matchedMarketIds.has(m.id))
+          .map(apiMarketToExplorer);
+
+        const combined = [...matchedExplorer, ...singleExplorer];
+
+        if (combined.length > 0) {
+          setAllMarkets(combined);
+          setDataSource("api");
+        }
+        // If API returns empty, keep mock data
+      } catch (err) {
+        console.warn("API unavailable, using mock data:", err);
+        // Keep mock data (already set as default)
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchData();
+    return () => { cancelled = true; };
+  }, []);
 
   const { matchedMarkets, singleMarkets, totalCount, filteredCount } =
     useMemo(() => {
-      let result = explorerMarkets;
+      let result = allMarkets;
 
       // Search
       if (search) {
@@ -261,10 +356,10 @@ export default function MarketsPage() {
       return {
         matchedMarkets: matched,
         singleMarkets: single,
-        totalCount: explorerMarkets.length,
+        totalCount: allMarkets.length,
         filteredCount: sorted.length,
       };
-    }, [search, filter, sort]);
+    }, [allMarkets, search, filter, sort]);
 
   const showBothSections =
     filter === "all" ||
@@ -279,11 +374,21 @@ export default function MarketsPage() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Markets Explorer</h1>
-        <p className="text-sm text-white/40 mt-1">
-          Compare prediction markets across Polymarket & Kalshi
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Markets Explorer</h1>
+          <p className="text-sm text-white/40 mt-1">
+            Compare prediction markets across Polymarket & Kalshi
+          </p>
+        </div>
+        {dataSource === "api" && (
+          <span className="text-[10px] px-2 py-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+            Live Data
+          </span>
+        )}
+        {loading && (
+          <span className="text-[10px] text-white/30 animate-pulse">Loading...</span>
+        )}
       </div>
 
       {/* Search + Sort */}

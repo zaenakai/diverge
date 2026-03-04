@@ -8,11 +8,14 @@
     "remove": "sst remove"
   },
   "devDependencies": {
+    "@types/pg": "^8.18.0",
     "sst": "^4.1.8",
     "typescript": "^5.9.3"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.4.2",
     "@prisma/client": "^7.4.2",
+    "pg": "^8.19.0",
     "prisma": "^7.4.2"
   }
 }

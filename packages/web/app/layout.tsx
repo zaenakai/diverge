@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Comfortaa, Poppins, Quicksand } from "next/font/google";
 import "./globals.css";
 import { Nav } from "@/components/nav";
+import { Providers } from "@/components/providers";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -44,6 +45,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${inter.className} ${comfortaa.variable} ${poppins.variable} ${quicksand.variable} bg-[#0a0a0a] text-white antialiased`}>
+        <Providers>
         <TooltipProvider>
           <Nav />
           <main className="min-h-[calc(100vh-57px)]">{children}</main>
@@ -58,6 +60,7 @@ export default function RootLayout({
             </div>
           </footer>
         </TooltipProvider>
+        </Providers>
       </body>
     </html>
   );
