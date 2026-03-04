@@ -5,8 +5,8 @@
  * upserts into PostgreSQL.
  */
 
-import * as polymarket from "@diverge/core/platforms/polymarket.js";
-import * as kalshi from "@diverge/core/platforms/kalshi.js";
+import * as polymarket from "../../../core/src/platforms/polymarket.js";
+import * as kalshi from "../../../core/src/platforms/kalshi.js";
 import prisma from "../db.js";
 
 /** Ensure platform rows exist and return their IDs */
@@ -30,9 +30,12 @@ async function collectPolymarket(platformId: number): Promise<number> {
   let count = 0;
   let offset = 0;
   const limit = 100;
+  const maxPages = 50; // cap at 5000 markets per run
 
   while (true) {
-    const markets = await polymarket.fetchMarkets({ limit, offset, active: true });
+    console.log(`[Polymarket] Fetching offset=${offset}...`);
+    const markets = await polymarket.fetchMarkets({ limit, offset, active: true, closed: false });
+    console.log(`[Polymarket] Got ${markets.length} markets`);
     if (markets.length === 0) break;
 
     for (const market of markets) {
@@ -73,7 +76,7 @@ async function collectPolymarket(platformId: number): Promise<number> {
     }
 
     offset += limit;
-    if (markets.length < limit) break;
+    if (markets.length < limit || offset / limit >= maxPages) break;
   }
 
   return count;

@@ -1,17 +1,16 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { PlatformBadge } from "@/components/platform-badge";
+import { categoryColors, type AccuracyData } from "@/lib/format";
 import {
-  overallBrier,
-  accuracyByCategory,
-  calibrationData,
-  accuracyTrend,
-  notableMisses,
-  categoryColors,
-} from "@/lib/mock-data";
-import type { AccuracyData, NotableMiss } from "@/lib/mock-data";
+  getAccuracy,
+  getCalibration,
+  type AccuracyResponse,
+  type CalibrationResponse,
+  type NotableMiss,
+} from "@/lib/api";
 import {
   Table,
   TableBody,
@@ -28,9 +27,6 @@ import {
   CartesianGrid,
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
-  LineChart,
-  Line,
-  Legend,
   ReferenceLine,
 } from "recharts";
 
@@ -106,11 +102,9 @@ function CalibrationTooltipContent({ active, payload }: { active?: boolean; payl
 
 // ─── Brier Info Tooltip ──────────────────────────────────────────────────────
 
-function BrierInfoTooltip({ platform }: { platform: "polymarket" | "kalshi" }) {
+function BrierInfoTooltip({ platform, score, resolved }: { platform: "polymarket" | "kalshi"; score: number; resolved: number }) {
   const [show, setShow] = useState(false);
-  const score = platform === "polymarket" ? overallBrier.polymarket : overallBrier.kalshi;
   const improvement = Math.round((1 - score / 0.25) * 100);
-  const resolved = platform === "polymarket" ? overallBrier.polymarketResolved : overallBrier.kalshiResolved;
   const name = platform === "polymarket" ? "Polymarket" : "Kalshi";
 
   return (
@@ -167,11 +161,44 @@ function XShareButton({ text, className = "" }: { text: string; className?: stri
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function AccuracyPage() {
+  const [accuracyData, setAccuracyData] = useState<AccuracyResponse | null>(null);
+  const [calibrationData, setCalibrationData] = useState<CalibrationResponse | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   // Category table sort state
   const [catSort, setCatSort] = useState<{ key: CategorySortKey; dir: SortDir }>({
     key: "sampleSize",
     dir: "desc",
   });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchData() {
+      try {
+        const [accRes, calRes] = await Promise.all([
+          getAccuracy(),
+          getCalibration(),
+        ]);
+
+        if (cancelled) return;
+
+        setAccuracyData(accRes);
+        setCalibrationData(calRes);
+        setError(null);
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err.message ?? "Failed to load accuracy data");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchData();
+    return () => { cancelled = true; };
+  }, []);
 
   const handleCatSort = useCallback((key: CategorySortKey) => {
     setCatSort((prev) =>
@@ -181,31 +208,75 @@ export default function AccuracyPage() {
     );
   }, []);
 
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="text-center py-20 text-white/40 animate-pulse">Loading accuracy data...</div>
+      </div>
+    );
+  }
+
+  if (error || !accuracyData) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="text-center py-20">
+          <p className="text-red-400 mb-4">Failed to load accuracy data: {error ?? "Unknown error"}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // Extract platform data
+  const polyPlatform = accuracyData.byPlatform.find((p) => p.slug === "polymarket");
+  const kalshiPlatform = accuracyData.byPlatform.find((p) => p.slug === "kalshi");
+
+  const overallBrier = {
+    polymarket: polyPlatform?.avgBrierScore ?? 0,
+    kalshi: kalshiPlatform?.avgBrierScore ?? 0,
+    polymarketResolved: polyPlatform?.totalResolved ?? 0,
+    kalshiResolved: kalshiPlatform?.totalResolved ?? 0,
+  };
+
+  // Convert category data
+  const accuracyByCategory: AccuracyData[] = accuracyData.byCategory.map((cat) => ({
+    category: cat.category,
+    polyBrier: cat.platforms["polymarket"]?.avg ?? 0,
+    kalshiBrier: cat.platforms["kalshi"]?.avg ?? 0,
+    sampleSize: (cat.platforms["polymarket"]?.count ?? 0) + (cat.platforms["kalshi"]?.count ?? 0),
+  }));
+
   const sortedCategories = sortCategories(accuracyByCategory, catSort.key, catSort.dir);
+
+  // Notable misses
+  const notableMisses = accuracyData.notableMisses;
+
+  // Calibration data
+  const polyCalibration = (calibrationData?.buckets ?? []).map((b) => ({
+    predicted: b.predicted,
+    actual: b.platforms["polymarket"]?.actual ?? 0,
+    sampleSize: b.platforms["polymarket"]?.sampleSize ?? 0,
+  }));
+  const kalshiCalibration = (calibrationData?.buckets ?? []).map((b) => ({
+    predicted: b.predicted,
+    actual: b.platforms["kalshi"]?.actual ?? 0,
+    sampleSize: b.platforms["kalshi"]?.sampleSize ?? 0,
+  }));
 
   // Head-to-head share text
   const polyBetter = overallBrier.polymarket < overallBrier.kalshi;
-  const accuracyDiff = Math.round(
-    Math.abs(
-      ((overallBrier.kalshi - overallBrier.polymarket) / overallBrier.kalshi) * 100
-    )
-  );
+  const accuracyDiff = overallBrier.kalshi > 0
+    ? Math.round(Math.abs(((overallBrier.kalshi - overallBrier.polymarket) / overallBrier.kalshi) * 100))
+    : 0;
   const totalResolved = overallBrier.polymarketResolved + overallBrier.kalshiResolved;
   const headToHeadShareText = polyBetter
-    ? `Polymarket is ${accuracyDiff}% more accurate than Kalshi across ${totalResolved.toLocaleString()} resolved markets.\n\nBrier Score: Polymarket ${overallBrier.polymarket} vs Kalshi ${overallBrier.kalshi}\n\nFull breakdown → diverge.market/accuracy`
-    : `Kalshi is ${accuracyDiff}% more accurate than Polymarket across ${totalResolved.toLocaleString()} resolved markets.\n\nBrier Score: Kalshi ${overallBrier.kalshi} vs Polymarket ${overallBrier.polymarket}\n\nFull breakdown → diverge.market/accuracy`;
-
-  // Calibration data formatted for recharts
-  const polyCalibration = calibrationData.map((d) => ({
-    predicted: d.predicted,
-    actual: d.actualPoly,
-    sampleSize: d.sampleSizePoly,
-  }));
-  const kalshiCalibration = calibrationData.map((d) => ({
-    predicted: d.predicted,
-    actual: d.actualKalshi,
-    sampleSize: d.sampleSizeKalshi,
-  }));
+    ? `Polymarket is ${accuracyDiff}% more accurate than Kalshi across ${totalResolved.toLocaleString()} resolved markets.\n\nBrier Score: Polymarket ${overallBrier.polymarket.toFixed(3)} vs Kalshi ${overallBrier.kalshi.toFixed(3)}\n\nFull breakdown → diverge.market/accuracy`
+    : `Kalshi is ${accuracyDiff}% more accurate than Polymarket across ${totalResolved.toLocaleString()} resolved markets.\n\nBrier Score: Kalshi ${overallBrier.kalshi.toFixed(3)} vs Polymarket ${overallBrier.polymarket.toFixed(3)}\n\nFull breakdown → diverge.market/accuracy`;
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
@@ -229,7 +300,7 @@ export default function AccuracyPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="rounded-xl border border-blue-400/20 bg-blue-400/5 p-6 relative overflow-hidden">
             <div className="absolute top-3 right-3">
-              {overallBrier.polymarket < overallBrier.kalshi && (
+              {overallBrier.polymarket < overallBrier.kalshi && overallBrier.polymarket > 0 && (
                 <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
                   👑 More Accurate
                 </Badge>
@@ -238,9 +309,11 @@ export default function AccuracyPage() {
             <div className="text-sm font-medium text-blue-400 mb-1">Polymarket</div>
             <div className="flex items-baseline">
               <span className="text-5xl font-bold font-mono text-white mt-2">
-                {overallBrier.polymarket}
+                {overallBrier.polymarket > 0 ? overallBrier.polymarket.toFixed(3) : "—"}
               </span>
-              <BrierInfoTooltip platform="polymarket" />
+              {overallBrier.polymarket > 0 && (
+                <BrierInfoTooltip platform="polymarket" score={overallBrier.polymarket} resolved={overallBrier.polymarketResolved} />
+              )}
             </div>
             <div className="text-xs text-white/30 mt-2">
               Avg Brier Score • {overallBrier.polymarketResolved.toLocaleString()} resolved markets
@@ -248,7 +321,7 @@ export default function AccuracyPage() {
           </div>
           <div className="rounded-xl border border-orange-400/20 bg-orange-400/5 p-6 relative overflow-hidden">
             <div className="absolute top-3 right-3">
-              {overallBrier.kalshi < overallBrier.polymarket && (
+              {overallBrier.kalshi < overallBrier.polymarket && overallBrier.kalshi > 0 && (
                 <Badge className="bg-emerald-500/20 text-emerald-400 border-emerald-500/30 text-[10px]">
                   👑 More Accurate
                 </Badge>
@@ -257,9 +330,11 @@ export default function AccuracyPage() {
             <div className="text-sm font-medium text-orange-400 mb-1">Kalshi</div>
             <div className="flex items-baseline">
               <span className="text-5xl font-bold font-mono text-white mt-2">
-                {overallBrier.kalshi}
+                {overallBrier.kalshi > 0 ? overallBrier.kalshi.toFixed(3) : "—"}
               </span>
-              <BrierInfoTooltip platform="kalshi" />
+              {overallBrier.kalshi > 0 && (
+                <BrierInfoTooltip platform="kalshi" score={overallBrier.kalshi} resolved={overallBrier.kalshiResolved} />
+              )}
             </div>
             <div className="text-xs text-white/30 mt-2">
               Avg Brier Score • {overallBrier.kalshiResolved.toLocaleString()} resolved markets
@@ -273,308 +348,252 @@ export default function AccuracyPage() {
       </div>
 
       {/* Calibration Curve */}
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6">
-        <h2 className="text-sm font-medium text-white/60 mb-1">Calibration Curve</h2>
-        <p className="text-xs text-white/30 mb-4">
-          When a platform says 70%, how often does it actually happen? Perfect calibration = diagonal line.
-        </p>
-        <div className="h-[350px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <ScatterChart>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-              <XAxis
-                dataKey="predicted"
-                type="number"
-                domain={[0, 1]}
-                stroke="rgba(255,255,255,0.2)"
-                tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }}
-                tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
-                name="Predicted"
-                label={{
-                  value: "Predicted Probability",
-                  position: "bottom",
-                  fill: "rgba(255,255,255,0.3)",
-                  fontSize: 11,
-                  offset: -5,
-                }}
-              />
-              <YAxis
-                dataKey="actual"
-                type="number"
-                domain={[0, 1]}
-                stroke="rgba(255,255,255,0.2)"
-                tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }}
-                tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
-                name="Actual"
-                label={{
-                  value: "Actual Outcome Rate",
-                  angle: -90,
-                  position: "insideLeft",
-                  fill: "rgba(255,255,255,0.3)",
-                  fontSize: 11,
-                }}
-              />
-              <ReferenceLine
-                segment={[{ x: 0, y: 0 }, { x: 1, y: 1 }]}
-                stroke="rgba(255,255,255,0.15)"
-                strokeDasharray="4 4"
-                label={{ value: "Perfect", fill: "rgba(255,255,255,0.2)", fontSize: 10 }}
-              />
-              <RechartsTooltip content={<CalibrationTooltipContent />} />
-              <Scatter
-                name="Polymarket"
-                data={polyCalibration}
-                fill="#60a5fa"
-                line={{ stroke: "#60a5fa", strokeWidth: 1.5 }}
-                lineType="fitting"
-                shape="circle"
-              />
-              <Scatter
-                name="Kalshi"
-                data={kalshiCalibration}
-                fill="#fb923c"
-                line={{ stroke: "#fb923c", strokeWidth: 1.5 }}
-                lineType="fitting"
-                shape="circle"
-              />
-            </ScatterChart>
-          </ResponsiveContainer>
+      {(polyCalibration.length > 0 || kalshiCalibration.length > 0) && (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6">
+          <h2 className="text-sm font-medium text-white/60 mb-1">Calibration Curve</h2>
+          <p className="text-xs text-white/30 mb-4">
+            When a platform says 70%, how often does it actually happen? Perfect calibration = diagonal line.
+          </p>
+          <div className="h-[350px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ScatterChart>
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
+                <XAxis
+                  dataKey="predicted"
+                  type="number"
+                  domain={[0, 1]}
+                  stroke="rgba(255,255,255,0.2)"
+                  tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }}
+                  tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
+                  name="Predicted"
+                  label={{
+                    value: "Predicted Probability",
+                    position: "bottom",
+                    fill: "rgba(255,255,255,0.3)",
+                    fontSize: 11,
+                    offset: -5,
+                  }}
+                />
+                <YAxis
+                  dataKey="actual"
+                  type="number"
+                  domain={[0, 1]}
+                  stroke="rgba(255,255,255,0.2)"
+                  tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }}
+                  tickFormatter={(v: number) => `${Math.round(v * 100)}%`}
+                  name="Actual"
+                  label={{
+                    value: "Actual Outcome Rate",
+                    angle: -90,
+                    position: "insideLeft",
+                    fill: "rgba(255,255,255,0.3)",
+                    fontSize: 11,
+                  }}
+                />
+                <ReferenceLine
+                  segment={[{ x: 0, y: 0 }, { x: 1, y: 1 }]}
+                  stroke="rgba(255,255,255,0.15)"
+                  strokeDasharray="4 4"
+                  label={{ value: "Perfect", fill: "rgba(255,255,255,0.2)", fontSize: 10 }}
+                />
+                <RechartsTooltip content={<CalibrationTooltipContent />} />
+                <Scatter
+                  name="Polymarket"
+                  data={polyCalibration}
+                  fill="#60a5fa"
+                  line={{ stroke: "#60a5fa", strokeWidth: 1.5 }}
+                  lineType="fitting"
+                  shape="circle"
+                />
+                <Scatter
+                  name="Kalshi"
+                  data={kalshiCalibration}
+                  fill="#fb923c"
+                  line={{ stroke: "#fb923c", strokeWidth: 1.5 }}
+                  lineType="fitting"
+                  shape="circle"
+                />
+              </ScatterChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="flex items-center justify-center gap-6 mt-3 text-xs">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-blue-400" /> Polymarket
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full bg-orange-400" /> Kalshi
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-6 h-0 border-t border-dashed border-white/30" /> Perfect
+            </span>
+          </div>
         </div>
-        <div className="flex items-center justify-center gap-6 mt-3 text-xs">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-blue-400" /> Polymarket
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-orange-400" /> Kalshi
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-6 h-0 border-t border-dashed border-white/30" /> Perfect
-          </span>
-        </div>
-      </div>
+      )}
 
       {/* Category Breakdown — sortable */}
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
-        <div className="px-4 py-3 border-b border-white/5">
-          <h2 className="text-sm font-medium text-white/60">Accuracy by Category</h2>
+      {accuracyByCategory.length > 0 && (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/5">
+            <h2 className="text-sm font-medium text-white/60">Accuracy by Category</h2>
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/10 hover:bg-transparent">
+                  <TableHead
+                    className="text-white/40 text-xs cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleCatSort("category")}
+                  >
+                    Category
+                    <SortArrow active={catSort.key === "category"} dir={catSort.dir} />
+                  </TableHead>
+                  <TableHead
+                    className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleCatSort("polyBrier")}
+                  >
+                    <span className="text-blue-400">Polymarket</span>
+                    <SortArrow active={catSort.key === "polyBrier"} dir={catSort.dir} />
+                  </TableHead>
+                  <TableHead
+                    className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleCatSort("kalshiBrier")}
+                  >
+                    <span className="text-orange-400">Kalshi</span>
+                    <SortArrow active={catSort.key === "kalshiBrier"} dir={catSort.dir} />
+                  </TableHead>
+                  <TableHead
+                    className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleCatSort("winner")}
+                  >
+                    Winner
+                    <SortArrow active={catSort.key === "winner"} dir={catSort.dir} />
+                  </TableHead>
+                  <TableHead
+                    className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleCatSort("sampleSize")}
+                  >
+                    Sample Size
+                    <SortArrow active={catSort.key === "sampleSize"} dir={catSort.dir} />
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sortedCategories.map((row) => {
+                  const polyWins = row.polyBrier < row.kalshiBrier;
+                  return (
+                    <TableRow key={row.category} className="border-white/5 hover:bg-white/[0.02]">
+                      <TableCell>
+                        <span
+                          className={`text-xs px-2 py-1 rounded-md border capitalize ${categoryColors[row.category] ?? categoryColors["Other"]}`}
+                        >
+                          {row.category}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span
+                          className={`font-mono text-sm ${polyWins ? "font-bold text-blue-400" : "text-white/50"}`}
+                        >
+                          {row.polyBrier > 0 ? row.polyBrier.toFixed(3) : "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span
+                          className={`font-mono text-sm ${!polyWins ? "font-bold text-orange-400" : "text-white/50"}`}
+                        >
+                          {row.kalshiBrier > 0 ? row.kalshiBrier.toFixed(3) : "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${
+                            polyWins
+                              ? "border-blue-400/30 text-blue-400"
+                              : "border-orange-400/30 text-orange-400"
+                          }`}
+                        >
+                          {polyWins ? "Polymarket" : "Kalshi"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center font-mono text-xs text-white/50">
+                        {row.sampleSize}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-white/10 hover:bg-transparent">
-                <TableHead
-                  className="text-white/40 text-xs cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleCatSort("category")}
-                >
-                  Category
-                  <SortArrow active={catSort.key === "category"} dir={catSort.dir} />
-                </TableHead>
-                <TableHead
-                  className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleCatSort("polyBrier")}
-                >
-                  <span className="text-blue-400">Polymarket</span>
-                  <SortArrow active={catSort.key === "polyBrier"} dir={catSort.dir} />
-                </TableHead>
-                <TableHead
-                  className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleCatSort("kalshiBrier")}
-                >
-                  <span className="text-orange-400">Kalshi</span>
-                  <SortArrow active={catSort.key === "kalshiBrier"} dir={catSort.dir} />
-                </TableHead>
-                <TableHead
-                  className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleCatSort("winner")}
-                >
-                  Winner
-                  <SortArrow active={catSort.key === "winner"} dir={catSort.dir} />
-                </TableHead>
-                <TableHead
-                  className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleCatSort("sampleSize")}
-                >
-                  Sample Size
-                  <SortArrow active={catSort.key === "sampleSize"} dir={catSort.dir} />
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {sortedCategories.map((row) => {
-                const polyWins = row.polyBrier < row.kalshiBrier;
-                return (
-                  <TableRow key={row.category} className="border-white/5 hover:bg-white/[0.02]">
-                    <TableCell>
-                      <span
-                        className={`text-xs px-2 py-1 rounded-md border capitalize ${categoryColors[row.category]}`}
-                      >
-                        {row.category}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span
-                        className={`font-mono text-sm ${polyWins ? "font-bold text-blue-400" : "text-white/50"}`}
-                      >
-                        {row.polyBrier.toFixed(3)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span
-                        className={`font-mono text-sm ${!polyWins ? "font-bold text-orange-400" : "text-white/50"}`}
-                      >
-                        {row.kalshiBrier.toFixed(3)}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] ${
-                          polyWins
-                            ? "border-blue-400/30 text-blue-400"
-                            : "border-orange-400/30 text-orange-400"
-                        }`}
-                      >
-                        {polyWins ? "Polymarket" : "Kalshi"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center font-mono text-xs text-white/50">
-                      {row.sampleSize}
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
-
-      {/* Accuracy Trend */}
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6">
-        <h2 className="text-sm font-medium text-white/60 mb-1">Accuracy Trend (6 months)</h2>
-        <p className="text-xs text-white/30 mb-4">Both platforms are improving over time.</p>
-        <div className="h-[250px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={accuracyTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-              <XAxis
-                dataKey="month"
-                stroke="rgba(255,255,255,0.2)"
-                tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }}
-              />
-              <YAxis
-                stroke="rgba(255,255,255,0.2)"
-                tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }}
-                domain={[0.13, 0.19]}
-                tickFormatter={(v: number) => v.toFixed(3)}
-              />
-              <RechartsTooltip
-                contentStyle={{
-                  backgroundColor: "#1a1a1a",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "8px",
-                  color: "white",
-                  fontSize: "12px",
-                }}
-                formatter={(value) => [Number(value).toFixed(3), ""]}
-              />
-              <Line
-                type="monotone"
-                dataKey="polyBrier"
-                stroke="#60a5fa"
-                strokeWidth={2}
-                dot={{ fill: "#60a5fa", r: 3 }}
-                name="Polymarket"
-              />
-              <Line
-                type="monotone"
-                dataKey="kalshiBrier"
-                stroke="#fb923c"
-                strokeWidth={2}
-                dot={{ fill: "#fb923c", r: 3 }}
-                name="Kalshi"
-              />
-              <Legend
-                wrapperStyle={{ fontSize: "11px", color: "rgba(255,255,255,0.5)" }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      )}
 
       {/* Notable Misses */}
-      <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
-        <div className="px-4 py-3 border-b border-white/5">
-          <h2 className="text-sm font-medium text-white/60">Notable Misses</h2>
-          <p className="text-xs text-white/30 mt-0.5">
-            Markets where platforms were most wrong
-          </p>
+      {notableMisses.length > 0 && (
+        <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/5">
+            <h2 className="text-sm font-medium text-white/60">Notable Misses</h2>
+            <p className="text-xs text-white/30 mt-0.5">
+              Markets where platforms were most wrong
+            </p>
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/10 hover:bg-transparent">
+                  <TableHead className="text-white/40 text-xs">Market</TableHead>
+                  <TableHead className="text-white/40 text-xs text-center">Platform</TableHead>
+                  <TableHead className="text-white/40 text-xs text-center">Final Price</TableHead>
+                  <TableHead className="text-white/40 text-xs text-center">Outcome</TableHead>
+                  <TableHead className="text-white/40 text-xs text-center">Brier Score</TableHead>
+                  <TableHead className="text-white/40 text-xs text-center">Resolved</TableHead>
+                  <TableHead className="text-white/40 text-xs w-8" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {notableMisses.map((miss) => {
+                  const missShareText = `Prediction markets predicted "${miss.marketTitle}" at ${miss.finalPrice != null ? Math.round(miss.finalPrice * 100) : "?"}% — ${miss.outcome === 1 ? "it happened" : "it didn't happen"}.\n\nBrier score: ${miss.brierScore?.toFixed(2) ?? "N/A"}\n\nMore misses → diverge.market/accuracy`;
+                  return (
+                    <TableRow key={miss.id} className="border-white/5 hover:bg-white/[0.02]">
+                      <TableCell className="text-sm text-white/80 max-w-[200px] truncate">
+                        {miss.marketTitle}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <PlatformBadge platform={miss.platform as "polymarket" | "kalshi"} />
+                      </TableCell>
+                      <TableCell className="text-center font-mono text-sm text-white/60">
+                        {miss.finalPrice != null ? `${Math.round(miss.finalPrice * 100)}%` : "—"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Badge
+                          variant="outline"
+                          className={`text-[10px] ${
+                            miss.outcome === 1
+                              ? "border-emerald-500/30 text-emerald-400"
+                              : "border-red-500/30 text-red-400"
+                          }`}
+                        >
+                          {miss.outcome === 1 ? "YES" : "NO"}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <span className={`font-mono text-sm inline-block ${brierSeverityClass(miss.brierScore ?? 0)}`}>
+                          {miss.brierScore?.toFixed(2) ?? "—"}
+                        </span>
+                      </TableCell>
+                      <TableCell className="text-center text-xs text-white/40">
+                        {miss.resolvedAt ? new Date(miss.resolvedAt).toLocaleDateString() : "—"}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <XShareButton text={missShareText} className="opacity-0 group-hover:opacity-100" />
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
+              </TableBody>
+            </Table>
+          </div>
         </div>
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-white/10 hover:bg-transparent">
-                <TableHead className="text-white/40 text-xs">Market</TableHead>
-                <TableHead className="text-white/40 text-xs text-center">Platform</TableHead>
-                <TableHead className="text-white/40 text-xs text-center">Predicted</TableHead>
-                <TableHead className="text-white/40 text-xs text-center">Outcome</TableHead>
-                <TableHead className="text-white/40 text-xs text-center">Brier Impact</TableHead>
-                <TableHead className="text-white/40 text-xs">Context</TableHead>
-                <TableHead className="text-white/40 text-xs text-center">Resolved</TableHead>
-                <TableHead className="text-white/40 text-xs w-8" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {notableMisses.map((miss, i) => {
-                const missShareText = `Prediction markets predicted "${miss.market}" at ${Math.round(miss.predictedProb * 100)}% — ${miss.actualOutcome === "YES" ? "it happened" : "it didn't happen"}.\n\nBrier impact: ${miss.brierContribution.toFixed(2)}\n\nMore misses → diverge.market/accuracy`;
-                return (
-                  <TableRow key={i} className="border-white/5 hover:bg-white/[0.02]">
-                    <TableCell className="text-sm text-white/80 max-w-[200px] truncate">
-                      {miss.market}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <PlatformBadge platform={miss.platform} />
-                    </TableCell>
-                    <TableCell className="text-center font-mono text-sm text-white/60">
-                      {Math.round(miss.predictedProb * 100)}%
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <Badge
-                        variant="outline"
-                        className={`text-[10px] ${
-                          miss.actualOutcome === "YES"
-                            ? "border-emerald-500/30 text-emerald-400"
-                            : "border-red-500/30 text-red-400"
-                        }`}
-                      >
-                        {miss.actualOutcome}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <span className={`font-mono text-sm inline-block ${brierSeverityClass(miss.brierContribution)}`}>
-                        {miss.brierContribution.toFixed(2)}
-                      </span>
-                    </TableCell>
-                    <TableCell>
-                      <span
-                        className="text-white/40 text-xs max-w-[200px] truncate block"
-                        title={miss.context}
-                      >
-                        {miss.context}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center text-xs text-white/40">
-                      {miss.resolvedDate}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <XShareButton text={missShareText} className="opacity-0 group-hover:opacity-100" />
-                    </TableCell>
-                  </TableRow>
-                );
-              })}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+      )}
 
       {/* Pro CTA */}
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">

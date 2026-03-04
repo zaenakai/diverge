@@ -1,5 +1,8 @@
-node_modules\n.sst\n.build\n.next\n.env\n*.local
 node_modules/
+.sst/
+.build/
+.next/
+.env
+*.local
 dist/
-
 /generated/prisma

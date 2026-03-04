@@ -1,5 +1,7 @@
 "use client";
 
+import { Suspense } from "react";
+
 import { Check, X, Zap, Crown, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -73,7 +75,7 @@ const tiers = [
 
 const featureKeys = Object.keys(tiers[0].features) as Array<keyof (typeof tiers)[0]["features"]>;
 
-export default function PricingPage() {
+function PricingContent() {
   const { data: session } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -298,5 +300,14 @@ export default function PricingPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+
+export default function PricingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#0a0a0a]" />}>
+      <PricingContent />
+    </Suspense>
   );
 }

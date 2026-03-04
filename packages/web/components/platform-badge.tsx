@@ -1,4 +1,4 @@
-import type { Platform } from "@/lib/mock-data";
+import type { Platform } from "@/lib/format";
 
 interface PlatformBadgeProps {
   platform: Platform;

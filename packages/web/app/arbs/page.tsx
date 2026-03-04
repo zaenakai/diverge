@@ -1,19 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { StatCard } from "@/components/stat-card";
 import { ArbCard } from "@/components/arb-card";
 import { PlatformBadge } from "@/components/platform-badge";
 import { Badge } from "@/components/ui/badge";
-import {
-  arbOpportunities,
-  arbHistoricalPerformance,
-  formatUsd,
-  categoryColors,
-  type ArbOpportunity,
-  type Category,
-} from "@/lib/mock-data";
+import { formatUsd, categoryColors, type ArbOpportunity, type Platform } from "@/lib/format";
+import { getArbs, type ArbResult } from "@/lib/api";
 import {
   Table,
   TableBody,
@@ -22,15 +16,38 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Area,
-  AreaChart,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+
+// ── Transform API arb → local ArbOpportunity ────────
+
+function arbToLocal(arb: ArbResult): ArbOpportunity {
+  const priceA = arb.marketA.yesPrice ?? 0;
+  const priceB = arb.marketB.yesPrice ?? 0;
+  const buyPlatform = (arb.buyPlatform ?? arb.marketA.platform.slug) as Platform;
+  const sellPlatform = buyPlatform === "polymarket" ? "kalshi" : "polymarket";
+  const rawSpread = arb.spreadRaw ? Math.abs(arb.spreadRaw) * 100 : Math.abs(priceA - priceB) * 100;
+  const adjustedSpread = arb.spreadAdjusted ? Math.abs(arb.spreadAdjusted) * 100 : rawSpread * 0.85;
+
+  const detectedMs = new Date(arb.detectedAt).getTime();
+  const nowMs = Date.now();
+  const diffMins = Math.max(0, Math.floor((nowMs - detectedMs) / 60000));
+  const hours = Math.floor(diffMins / 60);
+  const mins = diffMins % 60;
+
+  return {
+    id: String(arb.id),
+    title: arb.marketA.title || arb.marketB.title,
+    category: arb.marketA.category ?? arb.marketB.category ?? "Other",
+    buyPlatform,
+    sellPlatform,
+    buyPrice: arb.buyPrice ?? (buyPlatform === arb.marketA.platform.slug ? priceA : priceB),
+    sellPrice: arb.sellPrice ?? (buyPlatform === arb.marketA.platform.slug ? priceB : priceA),
+    rawSpread,
+    adjustedSpread,
+    volume: arb.volumeMin ?? (arb.marketA.volume24h ?? 0) + (arb.marketB.volume24h ?? 0),
+    trend: "stable",
+    timeOpen: `${hours}h ${mins}m`,
+  };
+}
 
 // ─── Sort helpers ────────────────────────────────────────────────────────────
 
@@ -46,8 +63,6 @@ function parseDuration(t: string): number {
   return mins;
 }
 
-const trendOrder = { widening: 2, stable: 1, narrowing: 0 };
-
 function getSortValue(arb: ArbOpportunity, col: SortColumn): number | string {
   switch (col) {
     case "title": return arb.title.toLowerCase();
@@ -55,17 +70,16 @@ function getSortValue(arb: ArbOpportunity, col: SortColumn): number | string {
     case "rawSpread": return arb.rawSpread;
     case "adjustedSpread": return arb.adjustedSpread;
     case "volume": return arb.volume;
-    case "trend": return trendOrder[arb.trend];
+    case "trend": return arb.trend === "widening" ? 2 : arb.trend === "stable" ? 1 : 0;
     case "timeOpen": return parseDuration(arb.timeOpen);
   }
 }
 
 // ─── Filter types ────────────────────────────────────────────────────────────
 
-type CategoryFilter = "all" | Category;
+type CategoryFilter = "all" | string;
 type SpreadFilter = "all" | "1" | "2" | "3" | "5";
 type DirectionFilter = "all" | "buy-polymarket" | "buy-kalshi";
-type TimeFilter = "all" | "<1h" | "1-6h" | ">6h";
 
 // ─── Spread color helpers ────────────────────────────────────────────────────
 
@@ -114,11 +128,9 @@ function TrendIndicator({ trend }: { trend: "widening" | "narrowing" | "stable" 
 // ─── Page ────────────────────────────────────────────────────────────────────
 
 export default function ArbsPage() {
-  // Stats
-  const arbsOver1 = arbOpportunities.filter((a) => a.adjustedSpread > 1).length;
-  const arbsOver2 = arbOpportunities.filter((a) => a.adjustedSpread > 2).length;
-  const arbsOver5 = arbOpportunities.filter((a) => a.adjustedSpread > 5).length;
-  const lastPerf = arbHistoricalPerformance[arbHistoricalPerformance.length - 1];
+  const [allArbs, setAllArbs] = useState<ArbOpportunity[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Sort state
   const [sortColumn, setSortColumn] = useState<SortColumn>("adjustedSpread");
@@ -128,7 +140,35 @@ export default function ArbsPage() {
   const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
   const [spreadFilter, setSpreadFilter] = useState<SpreadFilter>("all");
   const [directionFilter, setDirectionFilter] = useState<DirectionFilter>("all");
-  const [timeFilter, setTimeFilter] = useState<TimeFilter>("all");
+
+  // Fetch arbs
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchData() {
+      try {
+        const res = await getArbs({ limit: 100 });
+        if (cancelled) return;
+
+        setAllArbs(res.arbs.map(arbToLocal));
+        setError(null);
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err.message ?? "Failed to load arbs");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchData();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Stats
+  const arbsOver1 = allArbs.filter((a) => a.adjustedSpread > 1).length;
+  const arbsOver2 = allArbs.filter((a) => a.adjustedSpread > 2).length;
+  const arbsOver5 = allArbs.filter((a) => a.adjustedSpread > 5).length;
 
   function handleSort(column: SortColumn) {
     if (sortColumn === column) {
@@ -146,11 +186,11 @@ export default function ArbsPage() {
 
   // Filtered + sorted data
   const { filteredArbs, totalCount } = useMemo(() => {
-    let result = [...arbOpportunities];
+    let result = [...allArbs];
 
     // Category
     if (categoryFilter !== "all") {
-      result = result.filter((a) => a.category === categoryFilter);
+      result = result.filter((a) => a.category.toLowerCase() === categoryFilter.toLowerCase());
     }
 
     // Min spread
@@ -166,17 +206,6 @@ export default function ArbsPage() {
       result = result.filter((a) => a.buyPlatform === "kalshi");
     }
 
-    // Time open
-    if (timeFilter !== "all") {
-      result = result.filter((a) => {
-        const mins = parseDuration(a.timeOpen);
-        if (timeFilter === "<1h") return mins < 60;
-        if (timeFilter === "1-6h") return mins >= 60 && mins <= 360;
-        if (timeFilter === ">6h") return mins > 360;
-        return true;
-      });
-    }
-
     // Sort
     result.sort((a, b) => {
       const aVal = getSortValue(a, sortColumn);
@@ -188,8 +217,8 @@ export default function ArbsPage() {
       return sortDirection === "asc" ? cmp : -cmp;
     });
 
-    return { filteredArbs: result, totalCount: arbOpportunities.length };
-  }, [categoryFilter, spreadFilter, directionFilter, timeFilter, sortColumn, sortDirection]);
+    return { filteredArbs: result, totalCount: allArbs.length };
+  }, [allArbs, categoryFilter, spreadFilter, directionFilter, sortColumn, sortDirection]);
 
   const visibleArbs = filteredArbs.slice(0, 5);
   const blurredArbs = filteredArbs.slice(5, 8);
@@ -201,6 +230,30 @@ export default function ArbsPage() {
         ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400"
         : "border-white/10 bg-white/[0.03] text-white/50 hover:text-white hover:border-white/20"
     }`;
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="text-center py-20 text-white/40 animate-pulse">Loading arb scanner...</div>
+      </div>
+    );
+  }
+
+  if (error && allArbs.length === 0) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="text-center py-20">
+          <p className="text-red-400 mb-4">Failed to load arbs: {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
@@ -220,19 +273,22 @@ export default function ArbsPage() {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatCard label="Active > 1%" value={arbsOver1.toString()} icon="📊" />
         <StatCard label="Active > 2%" value={arbsOver2.toString()} highlight icon="🔥" />
         <StatCard label="Active > 5%" value={arbsOver5.toString()} icon="💎" />
-        <StatCard label="90d Hypothetical P&L" value={`+${lastPerf.cumulativeReturn.toFixed(1)}%`} highlight icon="💰" />
       </div>
 
       {/* Top Arb Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {arbOpportunities.slice(0, 3).map((arb) => (
-          <ArbCard key={arb.id} arb={arb} />
-        ))}
-      </div>
+      {allArbs.length > 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          {allArbs.slice(0, 3).map((arb) => (
+            <ArbCard key={arb.id} arb={arb} />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-8 text-white/30 text-sm">No active arb opportunities found.</div>
+      )}
 
       {/* ── Inline Teaser CTA ── */}
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
@@ -268,7 +324,7 @@ export default function ArbsPage() {
           ))}
         </div>
 
-        {/* Second row: spread, direction, time */}
+        {/* Second row: spread, direction */}
         <div className="flex flex-wrap gap-2 items-center">
           {/* Min spread */}
           <span className="text-xs text-white/30 mr-1">Min spread:</span>
@@ -299,25 +355,6 @@ export default function ArbsPage() {
               {label}
             </button>
           ))}
-
-          <span className="w-px h-5 bg-white/10 mx-2" />
-
-          {/* Time open */}
-          <span className="text-xs text-white/30 mr-1">Time open:</span>
-          {([
-            ["all", "All"],
-            ["<1h", "<1h"],
-            ["1-6h", "1-6h"],
-            [">6h", ">6h"],
-          ] as [TimeFilter, string][]).map(([val, label]) => (
-            <button
-              key={val}
-              onClick={() => setTimeFilter(val)}
-              className={pillClass(timeFilter === val)}
-            >
-              {label}
-            </button>
-          ))}
         </div>
 
         {/* Results count */}
@@ -327,219 +364,168 @@ export default function ArbsPage() {
       </div>
 
       {/* ── Full Arb Table ── */}
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
-        <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-          <h2 className="text-sm font-medium text-white/60">All Active Opportunities</h2>
-          <Badge variant="outline" className="border-white/10 text-white/30 text-[10px]">
-            {filteredArbs.length} active
-          </Badge>
-        </div>
-        <div className="overflow-x-auto relative">
-          <Table>
-            <TableHeader>
-              <TableRow className="border-white/10 hover:bg-transparent">
-                <TableHead
-                  className="text-white/40 text-xs cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleSort("title")}
-                >
-                  Market <SortArrow column="title" />
-                </TableHead>
-                <TableHead
-                  className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleSort("platforms")}
-                >
-                  Platforms <SortArrow column="platforms" />
-                </TableHead>
-                <TableHead
-                  className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleSort("rawSpread")}
-                >
-                  Raw Spread <SortArrow column="rawSpread" />
-                </TableHead>
-                <TableHead
-                  className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleSort("adjustedSpread")}
-                >
-                  Net Spread <SortArrow column="adjustedSpread" />
-                </TableHead>
-                <TableHead
-                  className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleSort("volume")}
-                >
-                  Volume <SortArrow column="volume" />
-                </TableHead>
-                <TableHead
-                  className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleSort("trend")}
-                >
-                  Trend <SortArrow column="trend" />
-                </TableHead>
-                <TableHead
-                  className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                  onClick={() => handleSort("timeOpen")}
-                >
-                  Time Open <SortArrow column="timeOpen" />
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {/* Visible rows */}
-              {visibleArbs.map((arb) => (
-                <TableRow
-                  key={arb.id}
-                  className={`border-white/5 hover:bg-white/[0.02] cursor-pointer transition-colors ${getRowBorder(arb.rawSpread)}`}
-                >
-                  <TableCell className="font-medium text-sm text-white/80 max-w-[180px]">
-                    <div className="flex items-center gap-2">
-                      <span className={`text-[9px] px-1 py-0.5 rounded border shrink-0 ${categoryColors[arb.category]}`}>
-                        {arb.category}
-                      </span>
-                      <span className="truncate">{arb.title}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <span className="text-[10px] text-white/30">Buy</span>
-                      <PlatformBadge platform={arb.buyPlatform} />
-                      <span className="font-mono text-xs">{Math.round(arb.buyPrice * 100)}¢</span>
-                      <span className="text-white/20 mx-0.5">→</span>
-                      <span className="text-[10px] text-white/30">Sell</span>
-                      <PlatformBadge platform={arb.sellPlatform} />
-                      <span className="font-mono text-xs">{Math.round(arb.sellPrice * 100)}¢</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span className={`font-mono text-sm font-bold ${getSpreadColor(arb.rawSpread)}`}>
-                      {arb.rawSpread.toFixed(1)}%
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <span className={`font-mono text-sm ${getSpreadColor(arb.adjustedSpread)}`}>
-                      {arb.adjustedSpread.toFixed(1)}%
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-center font-mono text-xs text-white/50">
-                    {formatUsd(arb.volume)}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <TrendIndicator trend={arb.trend} />
-                  </TableCell>
-                  <TableCell className="text-center font-mono text-xs text-white/50">
-                    {arb.timeOpen}
-                  </TableCell>
+      {filteredArbs.length > 0 && (
+        <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+          <div className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+            <h2 className="text-sm font-medium text-white/60">All Active Opportunities</h2>
+            <Badge variant="outline" className="border-white/10 text-white/30 text-[10px]">
+              {filteredArbs.length} active
+            </Badge>
+          </div>
+          <div className="overflow-x-auto relative">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-white/10 hover:bg-transparent">
+                  <TableHead
+                    className="text-white/40 text-xs cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleSort("title")}
+                  >
+                    Market <SortArrow column="title" />
+                  </TableHead>
+                  <TableHead
+                    className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleSort("platforms")}
+                  >
+                    Platforms <SortArrow column="platforms" />
+                  </TableHead>
+                  <TableHead
+                    className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleSort("rawSpread")}
+                  >
+                    Raw Spread <SortArrow column="rawSpread" />
+                  </TableHead>
+                  <TableHead
+                    className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleSort("adjustedSpread")}
+                  >
+                    Net Spread <SortArrow column="adjustedSpread" />
+                  </TableHead>
+                  <TableHead
+                    className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleSort("volume")}
+                  >
+                    Volume <SortArrow column="volume" />
+                  </TableHead>
+                  <TableHead
+                    className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleSort("trend")}
+                  >
+                    Trend <SortArrow column="trend" />
+                  </TableHead>
+                  <TableHead
+                    className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                    onClick={() => handleSort("timeOpen")}
+                  >
+                    Time Open <SortArrow column="timeOpen" />
+                  </TableHead>
                 </TableRow>
-              ))}
+              </TableHeader>
+              <TableBody>
+                {/* Visible rows */}
+                {visibleArbs.map((arb) => (
+                  <TableRow
+                    key={arb.id}
+                    className={`border-white/5 hover:bg-white/[0.02] cursor-pointer transition-colors ${getRowBorder(arb.rawSpread)}`}
+                  >
+                    <TableCell className="font-medium text-sm text-white/80 max-w-[180px]">
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[9px] px-1 py-0.5 rounded border shrink-0 ${categoryColors[arb.category] ?? categoryColors["Other"]}`}>
+                          {arb.category}
+                        </span>
+                        <span className="truncate">{arb.title}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <span className="text-[10px] text-white/30">Buy</span>
+                        <PlatformBadge platform={arb.buyPlatform} />
+                        <span className="font-mono text-xs">{Math.round(arb.buyPrice * 100)}¢</span>
+                        <span className="text-white/20 mx-0.5">→</span>
+                        <span className="text-[10px] text-white/30">Sell</span>
+                        <PlatformBadge platform={arb.sellPlatform} />
+                        <span className="font-mono text-xs">{Math.round(arb.sellPrice * 100)}¢</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className={`font-mono text-sm font-bold ${getSpreadColor(arb.rawSpread)}`}>
+                        {arb.rawSpread.toFixed(1)}%
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className={`font-mono text-sm ${getSpreadColor(arb.adjustedSpread)}`}>
+                        {arb.adjustedSpread.toFixed(1)}%
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center font-mono text-xs text-white/50">
+                      {formatUsd(arb.volume)}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <TrendIndicator trend={arb.trend} />
+                    </TableCell>
+                    <TableCell className="text-center font-mono text-xs text-white/50">
+                      {arb.timeOpen}
+                    </TableCell>
+                  </TableRow>
+                ))}
 
-              {/* Blurred rows */}
-              {blurredArbs.length > 0 && (
-                <>
-                  {blurredArbs.map((arb) => (
-                    <TableRow
-                      key={arb.id}
-                      className={`border-white/5 transition-colors ${getRowBorder(arb.rawSpread)}`}
-                      style={{ filter: "blur(4px)", pointerEvents: "none" }}
-                    >
-                      <TableCell className="font-medium text-sm text-white/80 max-w-[180px]">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[9px] px-1 py-0.5 rounded border shrink-0 ${categoryColors[arb.category]}`}>
-                            {arb.category}
-                          </span>
-                          <span className="truncate">{arb.title}</span>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <div className="flex items-center justify-center gap-1">
-                          <PlatformBadge platform={arb.buyPlatform} />
-                          <span className="text-white/20 mx-0.5">→</span>
-                          <PlatformBadge platform={arb.sellPlatform} />
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="font-mono text-sm font-bold text-white/50">{arb.rawSpread.toFixed(1)}%</span>
-                      </TableCell>
-                      <TableCell className="text-center">
-                        <span className="font-mono text-sm text-white/50">{arb.adjustedSpread.toFixed(1)}%</span>
-                      </TableCell>
-                      <TableCell className="text-center font-mono text-xs text-white/50">{formatUsd(arb.volume)}</TableCell>
-                      <TableCell className="text-center text-xs text-white/30">{arb.trend}</TableCell>
-                      <TableCell className="text-center font-mono text-xs text-white/50">{arb.timeOpen}</TableCell>
-                    </TableRow>
-                  ))}
-                </>
-              )}
-            </TableBody>
-          </Table>
+                {/* Blurred rows */}
+                {blurredArbs.length > 0 && (
+                  <>
+                    {blurredArbs.map((arb) => (
+                      <TableRow
+                        key={arb.id}
+                        className={`border-white/5 transition-colors ${getRowBorder(arb.rawSpread)}`}
+                        style={{ filter: "blur(4px)", pointerEvents: "none" }}
+                      >
+                        <TableCell className="font-medium text-sm text-white/80 max-w-[180px]">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[9px] px-1 py-0.5 rounded border shrink-0 ${categoryColors[arb.category] ?? categoryColors["Other"]}`}>
+                              {arb.category}
+                            </span>
+                            <span className="truncate">{arb.title}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1">
+                            <PlatformBadge platform={arb.buyPlatform} />
+                            <span className="text-white/20 mx-0.5">→</span>
+                            <PlatformBadge platform={arb.sellPlatform} />
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="font-mono text-sm font-bold text-white/50">{arb.rawSpread.toFixed(1)}%</span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="font-mono text-sm text-white/50">{arb.adjustedSpread.toFixed(1)}%</span>
+                        </TableCell>
+                        <TableCell className="text-center font-mono text-xs text-white/50">{formatUsd(arb.volume)}</TableCell>
+                        <TableCell className="text-center text-xs text-white/30">{arb.trend}</TableCell>
+                        <TableCell className="text-center font-mono text-xs text-white/50">{arb.timeOpen}</TableCell>
+                      </TableRow>
+                    ))}
+                  </>
+                )}
+              </TableBody>
+            </Table>
 
-          {/* Blur overlay */}
-          {blurredArbs.length > 0 && (
-            <div className="absolute bottom-0 left-0 right-0 h-32 flex items-center justify-center bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent">
-              <div className="text-center">
-                <div className="text-lg mb-1">🔒</div>
-                <p className="text-sm text-white/60 mb-2">Upgrade to see all opportunities</p>
-                <Link
-                  href="/pricing"
-                  className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition"
-                >
-                  Unlock All Arbs →
-                </Link>
+            {/* Blur overlay */}
+            {blurredArbs.length > 0 && (
+              <div className="absolute bottom-0 left-0 right-0 h-32 flex items-center justify-center bg-gradient-to-t from-[#0a0a0a] via-[#0a0a0a]/80 to-transparent">
+                <div className="text-center">
+                  <div className="text-lg mb-1">🔒</div>
+                  <p className="text-sm text-white/60 mb-2">Upgrade to see all opportunities</p>
+                  <Link
+                    href="/pricing"
+                    className="inline-flex items-center px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition"
+                  >
+                    Unlock All Arbs →
+                  </Link>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
-      </div>
-
-      {/* Historical Performance Chart */}
-      <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6">
-        <h2 className="text-sm font-medium text-white/60 mb-4">
-          Hypothetical Cumulative Returns — All Arbs &gt;2% (90d backtest)
-        </h2>
-        <div className="h-[300px]">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={arbHistoricalPerformance}>
-              <defs>
-                <linearGradient id="emeraldGrad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.04)" />
-              <XAxis
-                dataKey="date"
-                stroke="rgba(255,255,255,0.2)"
-                tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }}
-                tickFormatter={(v) => v.slice(5)}
-                interval={14}
-              />
-              <YAxis
-                stroke="rgba(255,255,255,0.2)"
-                tick={{ fill: "rgba(255,255,255,0.3)", fontSize: 10 }}
-                tickFormatter={(v: number) => `${v.toFixed(0)}%`}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#1a1a1a",
-                  border: "1px solid rgba(255,255,255,0.1)",
-                  borderRadius: "8px",
-                  color: "white",
-                  fontSize: "12px",
-                }}
-                formatter={(value) => [`${Number(value).toFixed(2)}%`, "Cumulative Return"]}
-                labelFormatter={(label) => `Date: ${label}`}
-              />
-              <Area
-                type="monotone"
-                dataKey="cumulativeReturn"
-                stroke="#10b981"
-                fill="url(#emeraldGrad)"
-                strokeWidth={2}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-        <p className="text-xs text-white/30 italic mt-3">
-          Based on equal-weight positions on all arbs with &gt;2% net spread, assuming market resolution within 90 days. Past performance is not indicative of future results.
-        </p>
-      </div>
+      )}
 
       {/* ── Pro Pricing Section ── */}
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] overflow-hidden">

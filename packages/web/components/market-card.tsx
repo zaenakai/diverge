@@ -1,7 +1,22 @@
-import type { Market } from "@/lib/mock-data";
-import { formatUsd, formatPrice, categoryColors } from "@/lib/mock-data";
+import { formatUsd, categoryColors, type Platform } from "@/lib/format";
 import { PlatformBadge } from "./platform-badge";
 import { Sparkline } from "./sparkline";
+
+interface Market {
+  platform: Platform;
+  category: string;
+  matchedId?: string;
+  title: string;
+  sparkline: number[];
+  yesPrice: number;
+  noPrice: number;
+  change24h: number;
+  volume24h: number;
+}
+
+function formatPrice(price: number): string {
+  return `${Math.round(price * 100)}¢`;
+}
 
 interface MarketCardProps {
   market: Market;
@@ -15,7 +30,7 @@ export function MarketCard({ market, showMatched }: MarketCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5 flex-wrap">
             <PlatformBadge platform={market.platform} />
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${categoryColors[market.category]}`}>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${categoryColors[market.category] ?? categoryColors["Other"]}`}>
               {market.category}
             </span>
             {showMatched && market.matchedId && (

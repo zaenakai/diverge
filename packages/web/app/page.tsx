@@ -1,17 +1,165 @@
+"use client";
+
+import { useState, useEffect } from "react";
 import Link from "next/link";
-import { StatCard } from "@/components/stat-card";
 import { ArbCard } from "@/components/arb-card";
 import { PlatformBadge } from "@/components/platform-badge";
+import { formatUsd, timeAgo, type ArbOpportunity, type Platform } from "@/lib/format";
 import {
-  platformStats,
-  arbOpportunities,
-  biggestMovers,
-  whaleTrades,
-  formatUsd,
-  timeAgo,
-} from "@/lib/mock-data";
+  getStats,
+  getArbs,
+  getMatches,
+  getWhales,
+  type StatsResponse,
+  type ArbResult,
+  type MatchedMarketPair,
+  type WhaleTradeResult,
+} from "@/lib/api";
+
+// ── Transform helpers ────────────────────────────────
+
+function arbToCard(arb: ArbResult): ArbOpportunity {
+  const priceA = arb.marketA.yesPrice ?? 0;
+  const priceB = arb.marketB.yesPrice ?? 0;
+  const buyPlatform = (arb.buyPlatform ?? arb.marketA.platform.slug) as Platform;
+  const sellPlatform = buyPlatform === "polymarket" ? "kalshi" : "polymarket";
+  const rawSpread = arb.spreadRaw ? Math.abs(arb.spreadRaw) * 100 : Math.abs(priceA - priceB) * 100;
+  const adjustedSpread = arb.spreadAdjusted ? Math.abs(arb.spreadAdjusted) * 100 : rawSpread * 0.85;
+
+  const detectedMs = new Date(arb.detectedAt).getTime();
+  const nowMs = Date.now();
+  const diffMins = Math.max(0, Math.floor((nowMs - detectedMs) / 60000));
+  const hours = Math.floor(diffMins / 60);
+  const mins = diffMins % 60;
+
+  return {
+    id: String(arb.id),
+    title: arb.marketA.title || arb.marketB.title,
+    category: arb.marketA.category ?? arb.marketB.category ?? "Other",
+    buyPlatform,
+    sellPlatform,
+    buyPrice: arb.buyPrice ?? (buyPlatform === arb.marketA.platform.slug ? priceA : priceB),
+    sellPrice: arb.sellPrice ?? (buyPlatform === arb.marketA.platform.slug ? priceB : priceA),
+    rawSpread,
+    adjustedSpread,
+    volume: arb.volumeMin ?? (arb.marketA.volume24h ?? 0) + (arb.marketB.volume24h ?? 0),
+    trend: "stable",
+    timeOpen: `${hours}h ${mins}m`,
+  };
+}
+
+interface MoverItem {
+  id: string;
+  title: string;
+  platforms: Platform[];
+  direction: "up" | "down";
+  spreadChange: number;
+}
+
+function matchToMover(match: MatchedMarketPair): MoverItem {
+  const platforms: Platform[] = [
+    match.marketA.platform.slug as Platform,
+    match.marketB.platform.slug as Platform,
+  ];
+  return {
+    id: String(match.id),
+    title: match.marketA.title || match.marketB.title,
+    platforms,
+    direction: match.spread > 0 ? "up" : "down",
+    spreadChange: match.spread,
+  };
+}
+
+interface WhaleDisplay {
+  id: number;
+  market: string;
+  platform: Platform;
+  side: string;
+  amount: number;
+  price: number;
+  timestamp: string;
+  walletAddress: string | null;
+}
+
+function whaleToDisplay(trade: WhaleTradeResult): WhaleDisplay {
+  return {
+    id: trade.id,
+    market: trade.marketTitle,
+    platform: trade.platform as Platform,
+    side: trade.side.toUpperCase(),
+    amount: trade.sizeUsd,
+    price: trade.price ?? 0,
+    timestamp: trade.detectedAt,
+    walletAddress: trade.traderAddress,
+  };
+}
+
+// ── Page ─────────────────────────────────────────────
 
 export default function Home() {
+  const [stats, setStats] = useState<StatsResponse | null>(null);
+  const [arbs, setArbs] = useState<ArbOpportunity[]>([]);
+  const [movers, setMovers] = useState<MoverItem[]>([]);
+  const [whales, setWhales] = useState<WhaleDisplay[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchData() {
+      try {
+        const [statsRes, arbsRes, matchesRes, whalesRes] = await Promise.all([
+          getStats(),
+          getArbs({ limit: 10 }),
+          getMatches({ limit: 10 }),
+          getWhales({ limit: 10 }),
+        ]);
+
+        if (cancelled) return;
+
+        setStats(statsRes);
+        setArbs(arbsRes.arbs.map(arbToCard));
+        setMovers(matchesRes.matches.map(matchToMover));
+        setWhales(whalesRes.trades.map(whaleToDisplay));
+        setError(null);
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err.message ?? "Failed to load data");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    fetchData();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="text-center py-20 text-white/40 animate-pulse">Loading dashboard...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="text-center py-20">
+          <p className="text-red-400 mb-4">Failed to load data: {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
       {/* Hero */}
@@ -33,11 +181,11 @@ export default function Home() {
       {/* Stats Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-0 rounded-xl border border-white/[0.06] overflow-hidden">
         {[
-          { label: "Total Markets", value: platformStats.totalMarkets.toLocaleString(), icon: "📊" },
-          { label: "Matched Markets", value: platformStats.matchedMarkets.toLocaleString(), icon: "🔗" },
-          { label: "Active Arbs", value: platformStats.activeArbs.toString(), icon: "⚡", highlight: true },
-          { label: "Avg Spread", value: `${platformStats.avgSpread}%`, icon: "📐" },
-          { label: "24h Volume", value: formatUsd(platformStats.totalVolume24h), icon: "💰" },
+          { label: "Total Markets", value: (stats?.totalMarkets ?? 0).toLocaleString(), icon: "📊" },
+          { label: "Matched Markets", value: (stats?.totalMatched ?? 0).toLocaleString(), icon: "🔗" },
+          { label: "Active Arbs", value: (stats?.activeArbs ?? 0).toString(), icon: "⚡", highlight: true },
+          { label: "Avg Brier", value: stats?.avgBrierScore != null ? stats.avgBrierScore.toFixed(3) : "—", icon: "📐" },
+          { label: "24h Volume", value: formatUsd(stats?.totalVolume24h ?? 0), icon: "💰" },
         ].map((stat, i) => (
           <div
             key={stat.label}
@@ -66,16 +214,20 @@ export default function Home() {
             View all →
           </Link>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {arbOpportunities.slice(0, 6).map((arb) => (
-            <ArbCard key={arb.id} arb={arb} />
-          ))}
-        </div>
+        {arbs.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {arbs.slice(0, 6).map((arb) => (
+              <ArbCard key={arb.id} arb={arb} />
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-8 text-white/30 text-sm">No active arb opportunities found.</div>
+        )}
 
         {/* Pro CTA */}
         <div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.03] px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <p className="text-sm text-white/50">
-            See 3 of 23 active arbs. Unlock all with{" "}
+            See {Math.min(arbs.length, 6)} of {stats?.activeArbs ?? 0} active arbs. Unlock all with{" "}
             <span className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-semibold mx-1">
               Pro
             </span>
@@ -95,14 +247,14 @@ export default function Home() {
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
-              <span>📈</span> Biggest Movers (24h)
+              <span>📈</span> Biggest Spreads
             </h2>
             <Link href="/markets" className="text-sm text-emerald-400 hover:text-emerald-300 transition">
               All markets →
             </Link>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] divide-y divide-white/[0.06]">
-            {biggestMovers.map((mover) => (
+            {movers.length > 0 ? movers.map((mover) => (
               <div key={mover.id} className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition cursor-pointer">
                 <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg font-bold ${
                   mover.direction === "up" ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
@@ -121,10 +273,12 @@ export default function Home() {
                   <div className={`text-sm font-mono font-bold ${mover.spreadChange > 0 ? "text-emerald-400" : "text-red-400"}`}>
                     {mover.spreadChange > 0 ? "+" : ""}{mover.spreadChange.toFixed(1)}%
                   </div>
-                  <div className="text-[10px] text-white/30">spread {mover.spreadChange > 0 ? "increase" : "decrease"}</div>
+                  <div className="text-[10px] text-white/30">spread</div>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-center py-8 text-white/30 text-sm">No matched markets found.</div>
+            )}
           </div>
         </section>
 
@@ -139,7 +293,7 @@ export default function Home() {
             </Link>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] divide-y divide-white/[0.06]">
-            {whaleTrades.slice(0, 6).map((trade) => (
+            {whales.length > 0 ? whales.slice(0, 6).map((trade) => (
               <div key={trade.id} className="flex items-center gap-3 px-4 py-3">
                 <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold ${
                   trade.side === "YES" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
@@ -161,7 +315,9 @@ export default function Home() {
                   <div className="text-[10px] text-white/30">@ {Math.round(trade.price * 100)}¢</div>
                 </div>
               </div>
-            ))}
+            )) : (
+              <div className="text-center py-8 text-white/30 text-sm">No whale trades found.</div>
+            )}
           </div>
         </section>
       </div>

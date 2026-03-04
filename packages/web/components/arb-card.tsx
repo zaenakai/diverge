@@ -1,5 +1,5 @@
-import type { ArbOpportunity } from "@/lib/mock-data";
-import { formatUsd, categoryColors } from "@/lib/mock-data";
+import type { ArbOpportunity } from "@/lib/format";
+import { formatUsd, categoryColors } from "@/lib/format";
 import { PlatformBadge } from "./platform-badge";
 
 interface ArbCardProps {
@@ -32,15 +32,12 @@ function getTimeColor(timeOpen: string): string {
 }
 
 export function ArbCard({ arb }: ArbCardProps) {
-  const polyPlatform = arb.buyPlatform === "polymarket" ? "buy" : "sell";
-  const kalshiPlatform = arb.buyPlatform === "kalshi" ? "buy" : "sell";
-
   return (
     <div className={`rounded-xl border p-4 hover:border-white/20 transition-all flex flex-col ${getSpreadBgColor(arb.rawSpread)}`}>
       <div className="flex items-start justify-between mb-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1.5">
-            <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${categoryColors[arb.category]}`}>
+            <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${categoryColors[arb.category] ?? categoryColors["Other"]}`}>
               {arb.category}
             </span>
             {arb.trend === "widening" && (

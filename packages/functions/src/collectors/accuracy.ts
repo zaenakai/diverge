@@ -12,7 +12,7 @@
  * Lower is better.
  */
 
-import type { CalibrationPoint } from "@diverge/core/types.js";
+import type { CalibrationPoint } from "../../../core/src/types.js";
 import prisma from "../db.js";
 
 function brierScore(forecast: number, outcome: number): number {

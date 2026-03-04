@@ -5,8 +5,8 @@
  * Uses structured + fuzzy matching from core/matching.ts.
  */
 
-import { findMatches } from "@diverge/core/matching.js";
-import type { Market } from "@diverge/core/types.js";
+import { findMatches } from "../../../core/src/matching.js";
+import type { Market } from "../../../core/src/types.js";
 import prisma from "../db.js";
 
 /** Convert a Prisma market row (with included platform) to the core Market type */

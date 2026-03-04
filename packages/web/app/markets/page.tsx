@@ -3,16 +3,10 @@
 import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
+import { formatUsd, categoryColors, type ExplorerMarket, type Platform } from "@/lib/format";
 import {
-  explorerMarkets as mockExplorerMarkets,
-  formatUsd,
-  categoryColors,
-  type ExplorerMarket,
-  type Category,
-} from "@/lib/mock-data";
-import {
-  getMarkets as apiGetMarkets,
-  getMatches as apiGetMatches,
+  getMarkets,
+  getMatches,
   type ApiMarket,
   type MatchedMarketPair,
 } from "@/lib/api";
@@ -29,7 +23,7 @@ type FilterType =
   | "cross-platform"
   | "polymarket-only"
   | "kalshi-only"
-  | Category;
+  | string;
 type SortType = "volume" | "spread" | "closing" | "change";
 
 const filters: { value: FilterType; label: string }[] = [
@@ -61,13 +55,13 @@ function apiMarketToExplorer(market: ApiMarket): ExplorerMarket {
   return {
     id: String(market.id),
     title: market.title,
-    category: (market.category ?? "science") as Category,
+    category: market.category ?? "Other",
     matched: false,
-    platform: market.platform.slug as "polymarket" | "kalshi",
+    platform: market.platform.slug as Platform,
     yesPrice: market.yesPrice ?? 0,
-    change24h: 0, // not available from single market endpoint
+    change24h: 0,
     volume24h: market.volume24h ?? 0,
-    totalVolume: market.volume24h ?? 0, // API doesn't track total separately
+    totalVolume: market.volume24h ?? 0,
     endDate: market.resolutionDate ?? "",
   };
 }
@@ -80,7 +74,7 @@ function matchToExplorer(match: MatchedMarketPair): ExplorerMarket {
   return {
     id: `match-${match.id}`,
     title: polyMarket.title || kalshiMarket.title,
-    category: ((polyMarket.category ?? kalshiMarket.category) ?? "science") as Category,
+    category: polyMarket.category ?? kalshiMarket.category ?? "Other",
     matched: true,
     polymarketPrice: polyMarket.yesPrice ?? undefined,
     kalshiPrice: kalshiMarket.yesPrice ?? undefined,
@@ -109,7 +103,7 @@ function MatchedCard({ market }: { market: ExplorerMarket }) {
             Kalshi
           </span>
           <span
-            className={`text-[10px] px-1.5 py-0.5 rounded-md border ${categoryColors[market.category]}`}
+            className={`text-[10px] px-1.5 py-0.5 rounded-md border ${categoryColors[market.category] ?? categoryColors["Other"]}`}
           >
             {market.category}
           </span>
@@ -127,7 +121,7 @@ function MatchedCard({ market }: { market: ExplorerMarket }) {
               Polymarket
             </div>
             <div className="text-lg font-mono font-bold text-blue-400">
-              {formatPercent(market.polymarketPrice!)}
+              {market.polymarketPrice != null ? formatPercent(market.polymarketPrice) : "—"}
             </div>
           </div>
           <div className="flex-1 rounded-lg bg-orange-400/[0.06] border border-orange-400/10 px-3 py-2 text-center">
@@ -135,7 +129,7 @@ function MatchedCard({ market }: { market: ExplorerMarket }) {
               Kalshi
             </div>
             <div className="text-lg font-mono font-bold text-orange-400">
-              {formatPercent(market.kalshiPrice!)}
+              {market.kalshiPrice != null ? formatPercent(market.kalshiPrice) : "—"}
             </div>
           </div>
         </div>
@@ -144,13 +138,13 @@ function MatchedCard({ market }: { market: ExplorerMarket }) {
         <div className="flex items-center justify-between mb-1">
           <div className="flex items-center gap-2">
             <span className="text-sm font-mono font-semibold text-emerald-500">
-              {market.spread!.toFixed(1)}% spread
+              {(market.spread ?? 0).toFixed(1)}% spread
             </span>
             {/* Mini spread bar */}
             <div className="w-16 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
               <div
                 className="h-full rounded-full bg-emerald-500/60"
-                style={{ width: `${Math.min(market.spread! * 10, 100)}%` }}
+                style={{ width: `${Math.min((market.spread ?? 0) * 10, 100)}%` }}
               />
             </div>
           </div>
@@ -191,7 +185,7 @@ function SingleCard({ market }: { market: ExplorerMarket }) {
             </span>
           )}
           <span
-            className={`text-[10px] px-1.5 py-0.5 rounded-md border ${categoryColors[market.category]}`}
+            className={`text-[10px] px-1.5 py-0.5 rounded-md border ${categoryColors[market.category] ?? categoryColors["Other"]}`}
           >
             {market.category}
           </span>
@@ -248,24 +242,22 @@ export default function MarketsPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
   const [sort, setSort] = useState<SortType>("volume");
-  const [allMarkets, setAllMarkets] = useState<ExplorerMarket[]>(mockExplorerMarkets);
-  const [dataSource, setDataSource] = useState<"mock" | "api">("mock");
+  const [allMarkets, setAllMarkets] = useState<ExplorerMarket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Fetch real data on mount, fall back to mock
   useEffect(() => {
     let cancelled = false;
 
     async function fetchData() {
       try {
         const [marketsRes, matchesRes] = await Promise.all([
-          apiGetMarkets({ limit: 200 }),
-          apiGetMatches({ limit: 200 }),
+          getMarkets({ limit: 200 }),
+          getMatches({ limit: 200 }),
         ]);
 
         if (cancelled) return;
 
-        // Build matched market IDs to exclude from singles
         const matchedMarketIds = new Set<number>();
         const matchedExplorer: ExplorerMarket[] = [];
 
@@ -275,21 +267,16 @@ export default function MarketsPage() {
           matchedExplorer.push(matchToExplorer(match));
         }
 
-        // Convert remaining markets to single-platform cards
         const singleExplorer: ExplorerMarket[] = marketsRes.markets
           .filter((m) => !matchedMarketIds.has(m.id))
           .map(apiMarketToExplorer);
 
-        const combined = [...matchedExplorer, ...singleExplorer];
-
-        if (combined.length > 0) {
-          setAllMarkets(combined);
-          setDataSource("api");
+        setAllMarkets([...matchedExplorer, ...singleExplorer]);
+        setError(null);
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(err.message ?? "Failed to load markets");
         }
-        // If API returns empty, keep mock data
-      } catch (err) {
-        console.warn("API unavailable, using mock data:", err);
-        // Keep mock data (already set as default)
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -303,13 +290,11 @@ export default function MarketsPage() {
     useMemo(() => {
       let result = allMarkets;
 
-      // Search
       if (search) {
         const q = search.toLowerCase();
         result = result.filter((m) => m.title.toLowerCase().includes(q));
       }
 
-      // Filter
       if (filter === "cross-platform") {
         result = result.filter((m) => m.matched);
       } else if (filter === "polymarket-only") {
@@ -322,10 +307,9 @@ export default function MarketsPage() {
         filter !== "all" &&
         ["politics", "crypto", "sports", "economics", "entertainment", "science"].includes(filter)
       ) {
-        result = result.filter((m) => m.category === filter);
+        result = result.filter((m) => m.category?.toLowerCase() === filter.toLowerCase());
       }
 
-      // Sort
       const sorted = [...result];
       switch (sort) {
         case "volume":
@@ -349,7 +333,6 @@ export default function MarketsPage() {
           break;
       }
 
-      // Split into matched and single
       const matched = sorted.filter((m) => m.matched);
       const single = sorted.filter((m) => !m.matched);
 
@@ -371,6 +354,22 @@ export default function MarketsPage() {
     filter === "polymarket-only" ||
     filter === "kalshi-only";
 
+  if (error && allMarkets.length === 0) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+        <div className="text-center py-20">
+          <p className="text-red-400 mb-4">Failed to load markets: {error}</p>
+          <button
+            onClick={() => window.location.reload()}
+            className="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-sm font-medium transition"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Header */}
@@ -381,11 +380,6 @@ export default function MarketsPage() {
             Compare prediction markets across Polymarket & Kalshi
           </p>
         </div>
-        {dataSource === "api" && (
-          <span className="text-[10px] px-2 py-1 rounded-md border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-            Live Data
-          </span>
-        )}
         {loading && (
           <span className="text-[10px] text-white/30 animate-pulse">Loading...</span>
         )}
@@ -506,7 +500,7 @@ export default function MarketsPage() {
       )}
 
       {/* Empty state */}
-      {matchedMarkets.length === 0 && singleMarkets.length === 0 && (
+      {matchedMarkets.length === 0 && singleMarkets.length === 0 && !loading && (
         <div className="text-center py-16 text-white/30 text-sm">
           No markets match your search.
         </div>
