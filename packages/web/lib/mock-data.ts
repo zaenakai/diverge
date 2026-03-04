@@ -321,6 +321,49 @@ export const trendingMarkets = markets
   .sort((a, b) => Math.abs(b.change24h) - Math.abs(a.change24h))
   .slice(0, 10);
 
+// ─── Biggest Movers (24h) ────────────────────────────────────────────────────
+
+export interface BiggestMover {
+  id: string;
+  title: string;
+  platforms: Platform[];
+  spreadChange: number; // positive = spread increased, negative = decreased
+  currentSpread: number;
+  direction: "up" | "down";
+}
+
+export const biggestMovers: BiggestMover[] = [
+  { id: "bm1", title: "Bitcoin above $150K by Dec 2026?", platforms: ["polymarket", "kalshi"], spreadChange: 3.2, currentSpread: 7.0, direction: "up" },
+  { id: "bm2", title: "Fed cuts rates June 2026", platforms: ["polymarket", "kalshi"], spreadChange: 2.8, currentSpread: 7.0, direction: "up" },
+  { id: "bm3", title: "DeSantis runs for President 2028", platforms: ["polymarket", "kalshi"], spreadChange: -1.5, currentSpread: 6.0, direction: "down" },
+  { id: "bm4", title: "Ethereum above $8K by Dec 2026", platforms: ["polymarket", "kalshi"], spreadChange: 1.9, currentSpread: 4.0, direction: "up" },
+  { id: "bm5", title: "S&P 500 above 6,500 June 2026", platforms: ["polymarket", "kalshi"], spreadChange: -0.8, currentSpread: 3.0, direction: "down" },
+  { id: "bm6", title: "Trump wins 2028 GOP nomination", platforms: ["polymarket", "kalshi"], spreadChange: 1.2, currentSpread: 5.0, direction: "up" },
+  { id: "bm7", title: "Chiefs win Super Bowl LXI", platforms: ["polymarket", "kalshi"], spreadChange: 0.5, currentSpread: 2.0, direction: "up" },
+  { id: "bm8", title: "Democrats win 2026 Senate", platforms: ["polymarket", "kalshi"], spreadChange: -2.1, currentSpread: 3.0, direction: "down" },
+];
+
+// ─── Arb Alerts ──────────────────────────────────────────────────────────────
+
+export interface ArbAlert {
+  id: string;
+  timestamp: string;
+  market: string;
+  spread: number;
+  platforms: [Platform, Platform];
+}
+
+export const arbAlerts: ArbAlert[] = [
+  { id: "al1", timestamp: "2026-03-03T22:58:00Z", market: "Bitcoin above $150K by Dec 2026?", spread: 7.0, platforms: ["polymarket", "kalshi"] },
+  { id: "al2", timestamp: "2026-03-03T22:41:00Z", market: "Fed cuts rates June 2026", spread: 7.0, platforms: ["polymarket", "kalshi"] },
+  { id: "al3", timestamp: "2026-03-03T22:15:00Z", market: "DeSantis runs for President 2028", spread: 6.0, platforms: ["polymarket", "kalshi"] },
+  { id: "al4", timestamp: "2026-03-03T21:52:00Z", market: "Ethereum above $8K by Dec 2026", spread: 4.0, platforms: ["polymarket", "kalshi"] },
+  { id: "al5", timestamp: "2026-03-03T21:30:00Z", market: "Trump wins 2028 GOP nomination", spread: 5.0, platforms: ["polymarket", "kalshi"] },
+  { id: "al6", timestamp: "2026-03-03T20:48:00Z", market: "Democrats win 2026 Senate", spread: 3.0, platforms: ["polymarket", "kalshi"] },
+  { id: "al7", timestamp: "2026-03-03T20:05:00Z", market: "S&P 500 above 6,500 June 2026", spread: 3.0, platforms: ["polymarket", "kalshi"] },
+  { id: "al8", timestamp: "2026-03-03T19:22:00Z", market: "Chiefs win Super Bowl LXI", spread: 2.0, platforms: ["polymarket", "kalshi"] },
+];
+
 // ─── Helper Utils ────────────────────────────────────────────────────────────
 
 export function formatUsd(n: number): string {

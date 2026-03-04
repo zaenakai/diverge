@@ -2,29 +2,59 @@ import Link from "next/link";
 import { StatCard } from "@/components/stat-card";
 import { ArbCard } from "@/components/arb-card";
 import { PlatformBadge } from "@/components/platform-badge";
-import { Sparkline } from "@/components/sparkline";
 import {
   platformStats,
   arbOpportunities,
-  trendingMarkets,
-  overallBrier,
+  biggestMovers,
+  arbAlerts,
   whaleTrades,
   formatUsd,
-  formatPrice,
   timeAgo,
-  categoryColors,
 } from "@/lib/mock-data";
 
 export default function Home() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
-      {/* Hero Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        <StatCard label="Total Markets" value={platformStats.totalMarkets.toLocaleString()} icon="📊" />
-        <StatCard label="Matched Markets" value={platformStats.matchedMarkets.toLocaleString()} icon="🔗" />
-        <StatCard label="Active Arbs" value={platformStats.activeArbs.toString()} highlight icon="⚡" />
-        <StatCard label="Avg Spread" value={`${platformStats.avgSpread}%`} icon="📐" />
-        <StatCard label="24h Volume" value={formatUsd(platformStats.totalVolume24h)} icon="💰" />
+      {/* Hero */}
+      <section className="py-6">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
+          Find price gaps between prediction markets before anyone else
+        </h1>
+        <p className="text-white/50 mt-2 text-lg max-w-2xl">
+          Diverge monitors Polymarket & Kalshi in real-time, surfacing arbitrage opportunities the moment spreads appear.
+        </p>
+        <Link
+          href="/arbs"
+          className="inline-flex items-center mt-4 px-5 py-2.5 rounded-lg bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-400 transition"
+        >
+          Explore Arb Opportunities →
+        </Link>
+      </section>
+
+      {/* Stats Bar */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-0 rounded-xl border border-white/[0.06] overflow-hidden">
+        {[
+          { label: "Total Markets", value: platformStats.totalMarkets.toLocaleString(), icon: "📊" },
+          { label: "Matched Markets", value: platformStats.matchedMarkets.toLocaleString(), icon: "🔗" },
+          { label: "Active Arbs", value: platformStats.activeArbs.toString(), icon: "⚡", highlight: true },
+          { label: "Avg Spread", value: `${platformStats.avgSpread}%`, icon: "📐" },
+          { label: "24h Volume", value: formatUsd(platformStats.totalVolume24h), icon: "💰" },
+        ].map((stat, i) => (
+          <div
+            key={stat.label}
+            className={`p-4 ${
+              stat.highlight ? "bg-emerald-500/5" : "bg-white/[0.02]"
+            } ${i > 0 ? "border-l border-white/[0.06]" : ""}`}
+          >
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm">{stat.icon}</span>
+              <span className="text-xs text-white/40 uppercase tracking-wider">{stat.label}</span>
+            </div>
+            <div className={`text-2xl font-bold font-mono mt-1 ${stat.highlight ? "text-emerald-400" : "text-white"}`}>
+              {stat.value}
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Top Arb Opportunities */}
@@ -44,85 +74,91 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Two-column: Trending + Whale Trades */}
+      {/* Two-column: Biggest Movers + Right column */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Trending Markets */}
+        {/* Biggest Movers (24h) */}
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold flex items-center gap-2">
-              <span>📈</span> Trending Markets
+              <span>📈</span> Biggest Movers (24h)
             </h2>
             <Link href="/markets" className="text-sm text-emerald-400 hover:text-emerald-300 transition">
               All markets →
             </Link>
           </div>
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] divide-y divide-white/5">
-            {trendingMarkets.slice(0, 8).map((market) => (
-              <div key={market.id} className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition cursor-pointer">
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-0.5">
-                    <PlatformBadge platform={market.platform} />
-                    <span className={`text-[9px] px-1 py-0.5 rounded border ${categoryColors[market.category]}`}>
-                      {market.category}
-                    </span>
-                  </div>
-                  <div className="text-sm text-white/80 truncate">{market.title}</div>
+          <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] divide-y divide-white/[0.06]">
+            {biggestMovers.map((mover) => (
+              <div key={mover.id} className="flex items-center gap-3 px-4 py-3 hover:bg-white/[0.02] transition cursor-pointer">
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg font-bold ${
+                  mover.direction === "up" ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"
+                }`}>
+                  {mover.direction === "up" ? "↑" : "↓"}
                 </div>
-                <Sparkline data={market.sparkline} width={60} height={20} />
-                <div className="text-right shrink-0">
-                  <div className="text-sm font-mono font-bold">{formatPrice(market.yesPrice)}</div>
-                  <div className={`text-xs font-mono ${market.change24h >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {market.change24h >= 0 ? "+" : ""}{market.change24h.toFixed(1)}%
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm text-white/80 truncate">{mover.title}</div>
+                  <div className="flex items-center gap-1.5 mt-1">
+                    {mover.platforms.map((p) => (
+                      <PlatformBadge key={p} platform={p} />
+                    ))}
                   </div>
+                </div>
+                <div className="text-right shrink-0">
+                  <div className={`text-sm font-mono font-bold ${mover.spreadChange > 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    {mover.spreadChange > 0 ? "+" : ""}{mover.spreadChange.toFixed(1)}%
+                  </div>
+                  <div className="text-[10px] text-white/30">spread {mover.spreadChange > 0 ? "increase" : "decrease"}</div>
                 </div>
               </div>
             ))}
           </div>
         </section>
 
-        {/* Right column: Accuracy + Whale Trades */}
+        {/* Right column: Arb Alerts + Whale Trades */}
         <div className="space-y-6">
-          {/* Platform Accuracy Snapshot */}
+          {/* Latest Arb Alerts */}
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold flex items-center gap-2">
-                <span>🎯</span> Platform Accuracy
+                <span>🔔</span> Latest Arb Alerts
               </h2>
-              <Link href="/accuracy" className="text-sm text-emerald-400 hover:text-emerald-300 transition">
-                Full analysis →
-              </Link>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-xl border border-blue-400/20 bg-blue-400/5 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold text-blue-400 text-sm">Polymarket</span>
-                  <span className="text-[10px] text-white/30">{overallBrier.polymarketResolved.toLocaleString()} resolved</span>
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] divide-y divide-white/[0.06]">
+              {arbAlerts.map((alert) => (
+                <div key={alert.id} className="flex items-center gap-3 px-4 py-3 border-l-2 border-l-emerald-500">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-white/80 truncate">{alert.market}</div>
+                    <div className="flex items-center gap-2 mt-1">
+                      {alert.platforms.map((p) => (
+                        <PlatformBadge key={p} platform={p} />
+                      ))}
+                      <span className="text-[10px] text-white/30">{timeAgo(alert.timestamp)}</span>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <div className="text-sm font-mono font-bold text-emerald-500">
+                      {alert.spread.toFixed(1)}%
+                    </div>
+                    <div className="text-[10px] text-white/30">spread</div>
+                  </div>
                 </div>
-                <div className="text-3xl font-bold font-mono text-white">{overallBrier.polymarket}</div>
-                <div className="text-[10px] text-white/30 mt-0.5">Avg Brier Score (lower = better)</div>
-              </div>
-              <div className="rounded-xl border border-orange-400/20 bg-orange-400/5 p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-semibold text-orange-400 text-sm">Kalshi</span>
-                  <span className="text-[10px] text-white/30">{overallBrier.kalshiResolved.toLocaleString()} resolved</span>
-                </div>
-                <div className="text-3xl font-bold font-mono text-white">{overallBrier.kalshi}</div>
-                <div className="text-[10px] text-white/30 mt-0.5">Avg Brier Score (lower = better)</div>
-              </div>
+              ))}
             </div>
           </section>
 
-          {/* Recent Whale Trades */}
+          {/* Whale Trades */}
           <section>
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold flex items-center gap-2">
                 <span>🐋</span> Whale Trades
               </h2>
+              <Link href="/whales" className="text-sm text-emerald-400 hover:text-emerald-300 transition">
+                View All →
+              </Link>
             </div>
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] divide-y divide-white/5">
+            <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] divide-y divide-white/[0.06]">
               {whaleTrades.slice(0, 6).map((trade) => (
                 <div key={trade.id} className="flex items-center gap-3 px-4 py-3">
-                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold ${
+                  <div className={`w-10 h-10 rounded-lg flex items-center justify-center text-xs font-bold ${
                     trade.side === "YES" ? "bg-emerald-500/20 text-emerald-400" : "bg-red-500/20 text-red-400"
                   }`}>
                     {trade.side}
