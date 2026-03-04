@@ -26,8 +26,8 @@ export function Nav() {
         <div className="flex items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 shrink-0">
-            <Image src="/favicon-src.png" alt="Diverge" width={32} height={32} className="rounded-lg" />
-            <span className="font-bold text-lg tracking-tight">diverge</span>
+            <Image src="/favicon-src.png" alt="Diverge" width={28} height={28} className="rounded-md" />
+            <span className="font-[var(--font-logo)] font-light text-xl tracking-[0.15em]">diverge</span>
             <span className="text-[10px] text-white/30 uppercase tracking-widest ml-1">Beta</span>
           </Link>
 
