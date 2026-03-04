@@ -71,6 +71,22 @@ export default function Home() {
             <ArbCard key={arb.id} arb={arb} />
           ))}
         </div>
+
+        {/* Pro CTA */}
+        <div className="mt-4 rounded-xl border border-white/[0.06] bg-white/[0.03] px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <p className="text-sm text-white/50">
+            See 3 of 23 active arbs. Unlock all with{" "}
+            <span className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-semibold mx-1">
+              Pro
+            </span>
+          </p>
+          <Link
+            href="/pricing"
+            className="shrink-0 text-sm font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+          >
+            Upgrade to Pro →
+          </Link>
+        </div>
       </section>
 
       {/* Two-column: Biggest Movers + Right column */}

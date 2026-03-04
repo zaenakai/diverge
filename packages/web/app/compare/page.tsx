@@ -333,6 +333,25 @@ export default function ComparePage() {
               </a>
             </Button>
           </div>
+
+          {/* Pro CTA */}
+          <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] px-5 py-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <span className="text-lg">📊</span>
+              <p className="text-sm text-white/50">
+                Historical spread data limited to 7 days on Free. Get 90-day history with{" "}
+                <span className="text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 font-semibold mx-0.5">
+                  Pro
+                </span>
+              </p>
+            </div>
+            <a
+              href="/pricing"
+              className="shrink-0 text-sm font-medium text-emerald-400 hover:text-emerald-300 transition-colors"
+            >
+              Upgrade to Pro →
+            </a>
+          </div>
         </div>
       )}
     </div>
