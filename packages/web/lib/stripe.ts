@@ -1,7 +1,8 @@
 import Stripe from "stripe";
+import { Resource } from "sst";
 
 function createStripe() {
-  const key = process.env.STRIPE_SECRET_KEY;
+  const key = (Resource as any).StripeSecretKey?.value || process.env.STRIPE_SECRET_KEY;
   if (!key) return null;
   return new Stripe(key, {
     apiVersion: "2025-12-18.acacia" as Stripe.LatestApiVersion,

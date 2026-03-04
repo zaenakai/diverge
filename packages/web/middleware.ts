@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-const publicPaths = new Set(["/", "/markets", "/accuracy", "/pricing", "/login"]);
+const publicPaths = new Set(["/", "/markets", "/arbs", "/compare", "/accuracy", "/pricing", "/login"]);
 
 function isPublicPath(pathname: string): boolean {
   if (publicPaths.has(pathname)) return true;
