@@ -91,11 +91,24 @@ export interface NotableMiss {
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+// Deterministic PRNG (mulberry32) — prevents SSR/client hydration mismatch
+function createRng(seed: number) {
+  let s = seed | 0;
+  return () => {
+    s = (s + 0x6d2b79f5) | 0;
+    let t = Math.imul(s ^ (s >>> 15), 1 | s);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+const rng = createRng(42);
+
 function generateSparkline(base: number, volatility: number = 0.05): number[] {
   const points: number[] = [];
   let current = base;
   for (let i = 0; i < 30; i++) {
-    current += (Math.random() - 0.5) * volatility;
+    current += (rng() - 0.5) * volatility;
     current = Math.max(0.02, Math.min(0.98, current));
     points.push(Math.round(current * 100) / 100);
   }
@@ -111,8 +124,8 @@ function generatePriceHistory(polyBase: number, kalshiBase: number) {
   for (let i = 29; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    poly += (Math.random() - 0.48) * 0.03;
-    kalshi += (Math.random() - 0.48) * 0.03;
+    poly += (rng() - 0.48) * 0.03;
+    kalshi += (rng() - 0.48) * 0.03;
     poly = Math.max(0.05, Math.min(0.95, poly));
     kalshi = Math.max(0.05, Math.min(0.95, kalshi));
     const dateStr = date.toISOString().split("T")[0];
@@ -228,7 +241,7 @@ export const arbHistoricalPerformance: { date: string; cumulativeReturn: number;
   for (let i = 89; i >= 0; i--) {
     const date = new Date(now);
     date.setDate(date.getDate() - i);
-    const daily = (Math.random() * 0.8 - 0.1);
+    const daily = (rng() * 0.8 - 0.1);
     cumulative += daily;
     data.push({
       date: date.toISOString().split("T")[0],
