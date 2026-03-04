@@ -156,10 +156,10 @@ function XShareButton({ text, className = "" }: { text: string; className?: stri
   return (
     <button
       onClick={() => shareToX(text)}
-      className={`text-white/20 hover:text-white/60 transition-colors ${className}`}
+      className={`inline-flex items-center justify-center w-7 h-7 rounded-md bg-white/[0.06] border border-white/[0.08] text-white/40 hover:text-white hover:bg-white/[0.12] transition-all ${className}`}
       aria-label="Share to X"
     >
-      <span className="text-sm">𝕏</span>
+      <span className="text-xs font-bold">𝕏</span>
     </button>
   );
 }
@@ -223,6 +223,7 @@ export default function AccuracyPage() {
       <div className="relative">
         <div className="flex items-center gap-3 mb-4">
           <h2 className="text-sm font-medium text-white/60">Head-to-Head Accuracy</h2>
+          <span className="text-xs text-white/30 bg-white/[0.04] px-2 py-0.5 rounded-md">Lower score = more accurate</span>
           <XShareButton text={headToHeadShareText} />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -244,7 +245,6 @@ export default function AccuracyPage() {
             <div className="text-xs text-white/30 mt-2">
               Avg Brier Score • {overallBrier.polymarketResolved.toLocaleString()} resolved markets
             </div>
-            <div className="text-xs text-white/20 mt-1">Lower = more accurate</div>
           </div>
           <div className="rounded-xl border border-orange-400/20 bg-orange-400/5 p-6 relative overflow-hidden">
             <div className="absolute top-3 right-3">
@@ -264,7 +264,6 @@ export default function AccuracyPage() {
             <div className="text-xs text-white/30 mt-2">
               Avg Brier Score • {overallBrier.kalshiResolved.toLocaleString()} resolved markets
             </div>
-            <div className="text-xs text-white/20 mt-1">Lower = more accurate</div>
           </div>
         </div>
         {/* Watermark for screenshots */}
