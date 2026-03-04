@@ -3,13 +3,33 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "sst dev",
+    "dev": "sst dev --stage dev",
+    "dev:web": "cd packages/web && next dev",
+    "build": "cd packages/web && next build",
     "deploy": "sst deploy --stage production",
-    "remove": "sst remove"
+    "deploy:dev": "sst deploy --stage dev",
+    "remove": "sst remove",
+    "remove:dev": "sst remove --stage dev",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:migrate:deploy": "prisma migrate deploy",
+    "db:push": "prisma db push",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
+    "collect:markets": "tsx packages/functions/src/collectors/markets.ts",
+    "collect:prices": "tsx packages/functions/src/collectors/prices.ts",
+    "collect:matcher": "tsx packages/functions/src/collectors/matcher.ts",
+    "collect:arbs": "tsx packages/functions/src/collectors/arbs.ts",
+    "collect:accuracy": "tsx packages/functions/src/collectors/accuracy.ts",
+    "secrets:set": "sst secret set --stage dev",
+    "secrets:list": "sst secret list --stage dev",
+    "unlock": "sst unlock --stage dev",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/pg": "^8.18.0",
     "sst": "^4.1.8",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3"
   },
   "dependencies": {
