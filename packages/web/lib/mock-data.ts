@@ -72,6 +72,8 @@ export interface CalibrationPoint {
   actualPoly: number;
   actualKalshi: number;
   sampleSize: number;
+  sampleSizePoly: number;
+  sampleSizeKalshi: number;
 }
 
 export interface AccuracyTrend {
@@ -87,6 +89,7 @@ export interface NotableMiss {
   actualOutcome: "YES" | "NO";
   brierContribution: number;
   resolvedDate: string;
+  context: string;
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -289,25 +292,25 @@ export const overallBrier = {
 };
 
 export const calibrationData: CalibrationPoint[] = [
-  { predicted: 0.05, actualPoly: 0.06, actualKalshi: 0.08, sampleSize: 45 },
-  { predicted: 0.10, actualPoly: 0.11, actualKalshi: 0.13, sampleSize: 62 },
-  { predicted: 0.15, actualPoly: 0.14, actualKalshi: 0.18, sampleSize: 78 },
-  { predicted: 0.20, actualPoly: 0.19, actualKalshi: 0.23, sampleSize: 95 },
-  { predicted: 0.25, actualPoly: 0.24, actualKalshi: 0.27, sampleSize: 88 },
-  { predicted: 0.30, actualPoly: 0.31, actualKalshi: 0.33, sampleSize: 102 },
-  { predicted: 0.35, actualPoly: 0.34, actualKalshi: 0.38, sampleSize: 91 },
-  { predicted: 0.40, actualPoly: 0.39, actualKalshi: 0.43, sampleSize: 85 },
-  { predicted: 0.45, actualPoly: 0.46, actualKalshi: 0.48, sampleSize: 79 },
-  { predicted: 0.50, actualPoly: 0.51, actualKalshi: 0.53, sampleSize: 112 },
-  { predicted: 0.55, actualPoly: 0.54, actualKalshi: 0.52, sampleSize: 98 },
-  { predicted: 0.60, actualPoly: 0.61, actualKalshi: 0.58, sampleSize: 87 },
-  { predicted: 0.65, actualPoly: 0.64, actualKalshi: 0.62, sampleSize: 76 },
-  { predicted: 0.70, actualPoly: 0.69, actualKalshi: 0.66, sampleSize: 93 },
-  { predicted: 0.75, actualPoly: 0.74, actualKalshi: 0.71, sampleSize: 81 },
-  { predicted: 0.80, actualPoly: 0.79, actualKalshi: 0.76, sampleSize: 68 },
-  { predicted: 0.85, actualPoly: 0.84, actualKalshi: 0.82, sampleSize: 55 },
-  { predicted: 0.90, actualPoly: 0.89, actualKalshi: 0.86, sampleSize: 42 },
-  { predicted: 0.95, actualPoly: 0.94, actualKalshi: 0.91, sampleSize: 31 },
+  { predicted: 0.05, actualPoly: 0.06, actualKalshi: 0.08, sampleSize: 45, sampleSizePoly: 28, sampleSizeKalshi: 17 },
+  { predicted: 0.10, actualPoly: 0.11, actualKalshi: 0.13, sampleSize: 62, sampleSizePoly: 38, sampleSizeKalshi: 24 },
+  { predicted: 0.15, actualPoly: 0.14, actualKalshi: 0.18, sampleSize: 78, sampleSizePoly: 47, sampleSizeKalshi: 31 },
+  { predicted: 0.20, actualPoly: 0.19, actualKalshi: 0.23, sampleSize: 95, sampleSizePoly: 58, sampleSizeKalshi: 37 },
+  { predicted: 0.25, actualPoly: 0.24, actualKalshi: 0.27, sampleSize: 88, sampleSizePoly: 53, sampleSizeKalshi: 35 },
+  { predicted: 0.30, actualPoly: 0.31, actualKalshi: 0.33, sampleSize: 102, sampleSizePoly: 62, sampleSizeKalshi: 40 },
+  { predicted: 0.35, actualPoly: 0.34, actualKalshi: 0.38, sampleSize: 91, sampleSizePoly: 55, sampleSizeKalshi: 36 },
+  { predicted: 0.40, actualPoly: 0.39, actualKalshi: 0.43, sampleSize: 85, sampleSizePoly: 52, sampleSizeKalshi: 33 },
+  { predicted: 0.45, actualPoly: 0.46, actualKalshi: 0.48, sampleSize: 79, sampleSizePoly: 48, sampleSizeKalshi: 31 },
+  { predicted: 0.50, actualPoly: 0.51, actualKalshi: 0.53, sampleSize: 112, sampleSizePoly: 68, sampleSizeKalshi: 44 },
+  { predicted: 0.55, actualPoly: 0.54, actualKalshi: 0.52, sampleSize: 98, sampleSizePoly: 60, sampleSizeKalshi: 38 },
+  { predicted: 0.60, actualPoly: 0.61, actualKalshi: 0.58, sampleSize: 87, sampleSizePoly: 53, sampleSizeKalshi: 34 },
+  { predicted: 0.65, actualPoly: 0.64, actualKalshi: 0.62, sampleSize: 76, sampleSizePoly: 46, sampleSizeKalshi: 30 },
+  { predicted: 0.70, actualPoly: 0.69, actualKalshi: 0.66, sampleSize: 93, sampleSizePoly: 57, sampleSizeKalshi: 36 },
+  { predicted: 0.75, actualPoly: 0.74, actualKalshi: 0.71, sampleSize: 81, sampleSizePoly: 49, sampleSizeKalshi: 32 },
+  { predicted: 0.80, actualPoly: 0.79, actualKalshi: 0.76, sampleSize: 68, sampleSizePoly: 42, sampleSizeKalshi: 26 },
+  { predicted: 0.85, actualPoly: 0.84, actualKalshi: 0.82, sampleSize: 55, sampleSizePoly: 34, sampleSizeKalshi: 21 },
+  { predicted: 0.90, actualPoly: 0.89, actualKalshi: 0.86, sampleSize: 42, sampleSizePoly: 26, sampleSizeKalshi: 16 },
+  { predicted: 0.95, actualPoly: 0.94, actualKalshi: 0.91, sampleSize: 31, sampleSizePoly: 19, sampleSizeKalshi: 12 },
 ];
 
 export const accuracyTrend: AccuracyTrend[] = [
@@ -320,12 +323,12 @@ export const accuracyTrend: AccuracyTrend[] = [
 ];
 
 export const notableMisses: NotableMiss[] = [
-  { market: "UK snap election called in Q4 2025", platform: "polymarket", predictedProb: 0.08, actualOutcome: "YES", brierContribution: 0.85, resolvedDate: "2025-10-15" },
-  { market: "Bitcoin drops below $50K in 2025", platform: "kalshi", predictedProb: 0.72, actualOutcome: "NO", brierContribution: 0.52, resolvedDate: "2025-12-31" },
-  { market: "Fed raises rates in March 2026", platform: "polymarket", predictedProb: 0.04, actualOutcome: "NO", brierContribution: 0.00, resolvedDate: "2026-03-01" },
-  { market: "Tesla stock above $400 by Feb 2026", platform: "kalshi", predictedProb: 0.61, actualOutcome: "NO", brierContribution: 0.37, resolvedDate: "2026-02-28" },
-  { market: "SpaceX Starship orbital success Q1 2026", platform: "polymarket", predictedProb: 0.82, actualOutcome: "YES", brierContribution: 0.03, resolvedDate: "2026-02-20" },
-  { market: "TikTok banned in US by March 2026", platform: "kalshi", predictedProb: 0.45, actualOutcome: "NO", brierContribution: 0.20, resolvedDate: "2026-03-01" },
+  { market: "UK snap election called in Q4 2025", platform: "polymarket", predictedProb: 0.08, actualOutcome: "YES", brierContribution: 0.85, resolvedDate: "2025-10-15", context: "Surprise announcement with no media leaks" },
+  { market: "Bitcoin drops below $50K in 2025", platform: "kalshi", predictedProb: 0.72, actualOutcome: "NO", brierContribution: 0.52, resolvedDate: "2025-12-31", context: "Low liquidity market, single whale moved the price" },
+  { market: "Fed raises rates in March 2026", platform: "polymarket", predictedProb: 0.04, actualOutcome: "NO", brierContribution: 0.00, resolvedDate: "2026-03-01", context: "Market correctly priced at near-zero probability" },
+  { market: "Tesla stock above $400 by Feb 2026", platform: "kalshi", predictedProb: 0.61, actualOutcome: "NO", brierContribution: 0.37, resolvedDate: "2026-02-28", context: "Unexpected earnings miss triggered late selloff" },
+  { market: "SpaceX Starship orbital success Q1 2026", platform: "polymarket", predictedProb: 0.82, actualOutcome: "YES", brierContribution: 0.03, resolvedDate: "2026-02-20", context: "Well-calibrated — high confidence, correct outcome" },
+  { market: "TikTok banned in US by March 2026", platform: "kalshi", predictedProb: 0.45, actualOutcome: "NO", brierContribution: 0.20, resolvedDate: "2026-03-01", context: "Breaking news event, market couldn't react in time" },
 ];
 
 // ─── Trending Markets (biggest movers) ───────────────────────────────────────
