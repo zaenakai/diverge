@@ -1,9 +1,15 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { Input } from "@/components/ui/input";
-import { MarketCard } from "@/components/market-card";
-import { markets, type Category, type Platform } from "@/lib/mock-data";
+import {
+  explorerMarkets,
+  formatUsd,
+  categoryColors,
+  type ExplorerMarket,
+  type Category,
+} from "@/lib/mock-data";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,62 +18,263 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
 
-type FilterType = "all" | Platform | Category;
-type SortType = "volume" | "newest" | "closing" | "change";
+type FilterType =
+  | "all"
+  | "cross-platform"
+  | "polymarket-only"
+  | "kalshi-only"
+  | Category;
+type SortType = "volume" | "spread" | "closing" | "change";
 
 const filters: { value: FilterType; label: string }[] = [
   { value: "all", label: "All" },
-  { value: "polymarket", label: "Polymarket" },
-  { value: "kalshi", label: "Kalshi" },
+  { value: "cross-platform", label: "Cross-Platform" },
+  { value: "polymarket-only", label: "Polymarket Only" },
+  { value: "kalshi-only", label: "Kalshi Only" },
   { value: "politics", label: "Politics" },
   { value: "crypto", label: "Crypto" },
   { value: "sports", label: "Sports" },
   { value: "economics", label: "Economics" },
+  { value: "science", label: "Science" },
 ];
 
 const sortOptions: { value: SortType; label: string }[] = [
   { value: "volume", label: "Volume" },
-  { value: "newest", label: "Newest" },
+  { value: "spread", label: "Spread" },
   { value: "closing", label: "Closing Soon" },
   { value: "change", label: "Price Change" },
 ];
+
+function formatPercent(price: number): string {
+  return `${Math.round(price * 100)}¢`;
+}
+
+// ─── Matched Market Card ─────────────────────────────────────────────────────
+
+function MatchedCard({ market }: { market: ExplorerMarket }) {
+  return (
+    <Link href={`/compare?market=${market.id}`} className="block">
+      <div className="rounded-xl border border-white/[0.06] border-l-2 border-l-emerald-500/30 bg-white/[0.03] p-4 hover:border-white/[0.12] hover:bg-white/[0.05] transition-all cursor-pointer group">
+        {/* Badges */}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          <span className="text-[10px] px-1.5 py-0.5 rounded-md border border-blue-400/30 bg-blue-400/10 text-blue-400 font-medium">
+            Polymarket
+          </span>
+          <span className="text-[10px] px-1.5 py-0.5 rounded-md border border-orange-400/30 bg-orange-400/10 text-orange-400 font-medium">
+            Kalshi
+          </span>
+          <span
+            className={`text-[10px] px-1.5 py-0.5 rounded-md border ${categoryColors[market.category]}`}
+          >
+            {market.category}
+          </span>
+        </div>
+
+        {/* Title */}
+        <h3 className="text-sm font-medium leading-tight text-white/90 group-hover:text-white transition-colors line-clamp-2 mb-3">
+          {market.title}
+        </h3>
+
+        {/* Dual prices */}
+        <div className="flex items-center gap-3 mb-2">
+          <div className="flex-1 rounded-lg bg-blue-400/[0.06] border border-blue-400/10 px-3 py-2 text-center">
+            <div className="text-[10px] text-blue-400/60 uppercase tracking-wide">
+              Polymarket
+            </div>
+            <div className="text-lg font-mono font-bold text-blue-400">
+              {formatPercent(market.polymarketPrice!)}
+            </div>
+          </div>
+          <div className="flex-1 rounded-lg bg-orange-400/[0.06] border border-orange-400/10 px-3 py-2 text-center">
+            <div className="text-[10px] text-orange-400/60 uppercase tracking-wide">
+              Kalshi
+            </div>
+            <div className="text-lg font-mono font-bold text-orange-400">
+              {formatPercent(market.kalshiPrice!)}
+            </div>
+          </div>
+        </div>
+
+        {/* Spread indicator */}
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-mono font-semibold text-emerald-500">
+              {market.spread!.toFixed(1)}% spread
+            </span>
+            {/* Mini spread bar */}
+            <div className="w-16 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+              <div
+                className="h-full rounded-full bg-emerald-500/60"
+                style={{ width: `${Math.min(market.spread! * 10, 100)}%` }}
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer: volume + compare link */}
+        <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/[0.04]">
+          <div className="text-[10px] text-white/30">
+            {formatUsd(market.volume24h)} combined 24h vol
+          </div>
+          <span className="text-xs text-emerald-400 group-hover:text-emerald-300 transition-colors font-medium">
+            Compare →
+          </span>
+        </div>
+      </div>
+    </Link>
+  );
+}
+
+// ─── Single Platform Card ────────────────────────────────────────────────────
+
+function SingleCard({ market }: { market: ExplorerMarket }) {
+  const isPolymarket = market.platform === "polymarket";
+  const changePositive = market.change24h >= 0;
+
+  return (
+    <a href="#" className="block">
+      <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 hover:border-white/[0.12] hover:bg-white/[0.05] transition-all cursor-pointer group">
+        {/* Badges */}
+        <div className="flex items-center gap-2 mb-2 flex-wrap">
+          {isPolymarket ? (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md border border-blue-400/30 bg-blue-400/10 text-blue-400 font-medium">
+              Polymarket
+            </span>
+          ) : (
+            <span className="text-[10px] px-1.5 py-0.5 rounded-md border border-orange-400/30 bg-orange-400/10 text-orange-400 font-medium">
+              Kalshi
+            </span>
+          )}
+          <span
+            className={`text-[10px] px-1.5 py-0.5 rounded-md border ${categoryColors[market.category]}`}
+          >
+            {market.category}
+          </span>
+        </div>
+
+        {/* Title */}
+        <h3 className="text-sm font-medium leading-tight text-white/90 group-hover:text-white transition-colors line-clamp-2 mb-3">
+          {market.title}
+        </h3>
+
+        {/* Price + 24h change */}
+        <div className="flex items-end justify-between">
+          <div>
+            <div className="text-[10px] text-white/30 uppercase">Yes</div>
+            <div
+              className={`text-lg font-mono font-bold ${isPolymarket ? "text-blue-400" : "text-orange-400"}`}
+            >
+              {formatPercent(market.yesPrice!)}
+            </div>
+          </div>
+          <div className="text-right">
+            <div
+              className={`text-sm font-mono font-medium flex items-center justify-end gap-0.5 ${changePositive ? "text-emerald-400" : "text-red-400"}`}
+            >
+              <span>{changePositive ? "↑" : "↓"}</span>
+              <span>
+                {changePositive ? "+" : ""}
+                {market.change24h.toFixed(1)}%
+              </span>
+            </div>
+            <div className="text-[10px] text-white/30">24h change</div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="flex items-center justify-between mt-3 pt-2 border-t border-white/[0.04]">
+          <div className="text-[10px] text-white/30">
+            {formatUsd(market.volume24h)} 24h vol
+          </div>
+          <span
+            className={`text-xs font-medium transition-colors ${isPolymarket ? "text-blue-400/60 group-hover:text-blue-400" : "text-orange-400/60 group-hover:text-orange-400"}`}
+          >
+            View →
+          </span>
+        </div>
+      </div>
+    </a>
+  );
+}
+
+// ─── Markets Page ────────────────────────────────────────────────────────────
 
 export default function MarketsPage() {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<FilterType>("all");
   const [sort, setSort] = useState<SortType>("volume");
 
-  const filtered = useMemo(() => {
-    let result = markets;
+  const { matchedMarkets, singleMarkets, totalCount, filteredCount } =
+    useMemo(() => {
+      let result = explorerMarkets;
 
-    if (search) {
-      const q = search.toLowerCase();
-      result = result.filter((m) => m.title.toLowerCase().includes(q));
-    }
+      // Search
+      if (search) {
+        const q = search.toLowerCase();
+        result = result.filter((m) => m.title.toLowerCase().includes(q));
+      }
 
-    if (filter !== "all") {
-      result = result.filter(
-        (m) => m.platform === filter || m.category === filter
-      );
-    }
+      // Filter
+      if (filter === "cross-platform") {
+        result = result.filter((m) => m.matched);
+      } else if (filter === "polymarket-only") {
+        result = result.filter(
+          (m) => !m.matched && m.platform === "polymarket"
+        );
+      } else if (filter === "kalshi-only") {
+        result = result.filter((m) => !m.matched && m.platform === "kalshi");
+      } else if (
+        filter !== "all" &&
+        ["politics", "crypto", "sports", "economics", "entertainment", "science"].includes(filter)
+      ) {
+        result = result.filter((m) => m.category === filter);
+      }
 
-    switch (sort) {
-      case "volume":
-        result = [...result].sort((a, b) => b.volume24h - a.volume24h);
-        break;
-      case "newest":
-        result = [...result].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        break;
-      case "closing":
-        result = [...result].sort((a, b) => new Date(a.endDate).getTime() - new Date(b.endDate).getTime());
-        break;
-      case "change":
-        result = [...result].sort((a, b) => Math.abs(b.change24h) - Math.abs(a.change24h));
-        break;
-    }
+      // Sort
+      const sorted = [...result];
+      switch (sort) {
+        case "volume":
+          sorted.sort((a, b) => b.volume24h - a.volume24h);
+          break;
+        case "spread":
+          sorted.sort(
+            (a, b) => (b.spread ?? 0) - (a.spread ?? 0)
+          );
+          break;
+        case "closing":
+          sorted.sort(
+            (a, b) =>
+              new Date(a.endDate).getTime() - new Date(b.endDate).getTime()
+          );
+          break;
+        case "change":
+          sorted.sort(
+            (a, b) => Math.abs(b.change24h) - Math.abs(a.change24h)
+          );
+          break;
+      }
 
-    return result;
-  }, [search, filter, sort]);
+      // Split into matched and single
+      const matched = sorted.filter((m) => m.matched);
+      const single = sorted.filter((m) => !m.matched);
+
+      return {
+        matchedMarkets: matched,
+        singleMarkets: single,
+        totalCount: explorerMarkets.length,
+        filteredCount: sorted.length,
+      };
+    }, [search, filter, sort]);
+
+  const showBothSections =
+    filter === "all" ||
+    ["politics", "crypto", "sports", "economics", "entertainment", "science"].includes(filter);
+  const showMatched =
+    showBothSections || filter === "cross-platform";
+  const showSingle =
+    showBothSections ||
+    filter === "polymarket-only" ||
+    filter === "kalshi-only";
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
@@ -75,14 +282,20 @@ export default function MarketsPage() {
       <div>
         <h1 className="text-2xl font-bold">Markets Explorer</h1>
         <p className="text-sm text-white/40 mt-1">
-          {markets.length} markets across Polymarket & Kalshi
+          Compare prediction markets across Polymarket & Kalshi
         </p>
       </div>
 
       {/* Search + Sort */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <svg
+            className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={2}
+          >
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
           </svg>
@@ -95,9 +308,18 @@ export default function MarketsPage() {
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.06] hover:text-white">
+            <Button
+              variant="outline"
+              className="border-white/10 bg-white/[0.03] text-white/70 hover:bg-white/[0.06] hover:text-white"
+            >
               Sort: {sortOptions.find((s) => s.value === sort)?.label}
-              <svg className="ml-2 w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg
+                className="ml-2 w-3 h-3"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
                 <path d="m6 9 6 6 6-6" />
               </svg>
             </Button>
@@ -135,15 +357,55 @@ export default function MarketsPage() {
 
       {/* Results count */}
       <div className="text-xs text-white/30">
-        Showing {filtered.length} market{filtered.length !== 1 ? "s" : ""}
+        Showing {filteredCount} of {totalCount} markets
       </div>
 
-      {/* Market Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-        {filtered.map((market) => (
-          <MarketCard key={market.id} market={market} showMatched />
-        ))}
-      </div>
+      {/* ── Cross-Platform Markets ── */}
+      {showMatched && matchedMarkets.length > 0 && (
+        <section>
+          <div className="flex items-center gap-3 mb-3">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-emerald-400/70">
+              Cross-Platform Markets
+            </h2>
+            <div className="flex-1 h-px bg-white/[0.06]" />
+            <span className="text-[10px] text-white/20">
+              {matchedMarkets.length} matched
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {matchedMarkets.map((market) => (
+              <MatchedCard key={market.id} market={market} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Single Platform Markets ── */}
+      {showSingle && singleMarkets.length > 0 && (
+        <section>
+          <div className="flex items-center gap-3 mb-3 mt-4">
+            <h2 className="text-xs font-semibold uppercase tracking-wider text-white/30">
+              Single Platform Only
+            </h2>
+            <div className="flex-1 h-px bg-white/[0.06]" />
+            <span className="text-[10px] text-white/20">
+              {singleMarkets.length} markets
+            </span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {singleMarkets.map((market) => (
+              <SingleCard key={market.id} market={market} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Empty state */}
+      {matchedMarkets.length === 0 && singleMarkets.length === 0 && (
+        <div className="text-center py-16 text-white/30 text-sm">
+          No markets match your search.
+        </div>
+      )}
     </div>
   );
 }
