@@ -102,11 +102,14 @@ function toNumber(val: string | undefined, fallback: number): number {
 /** Convert string decimal fields to numbers for JSON */
 function numericFields(obj: any): any {
   if (obj === null || obj === undefined) return obj;
+  if (obj instanceof Date) return obj.toISOString();
   if (typeof obj !== "object") return obj;
   if (Array.isArray(obj)) return obj.map(numericFields);
   const result: any = {};
   for (const [key, val] of Object.entries(obj)) {
-    if (
+    if (val instanceof Date) {
+      result[key] = val.toISOString();
+    } else if (
       typeof val === "string" &&
       ["yesPrice", "noPrice", "volume24h", "liquidity", "spreadRaw", "spreadAdjusted",
        "buyPrice", "sellPrice", "volumeMin", "sizeUsd", "price", "finalPrice",
