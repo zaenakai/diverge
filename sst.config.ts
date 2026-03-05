@@ -28,6 +28,9 @@ export default $config({
     // Shared function config — tell esbuild to bundle deps from root
     const nodejsConfig = {
       nodejs: { install: ["drizzle-orm", "pg"] },
+      environment: {
+        DATABASE_URL: databaseUrl.value,
+      },
     };
 
     new sst.aws.Cron("MarketCollector", {
@@ -113,6 +116,7 @@ export default $config({
         stripeWebhookSecret,
       ],
       environment: {
+        DATABASE_URL: databaseUrl.value,
         NEXT_PUBLIC_API_URL: api.url,
         NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_live_51T7hzB2UO0ITF91UrnQXawRoKuwWYXmLbjxQX97gc2bT8dLpVKt2H6D2KiM50CMqcdLLpxj2EkxZSZYrhLLqV8Eh00bhhyD80J",
         STRIPE_PRO_PRICE_ID: "price_1T7iE42UO0ITF91UTDDKftgH",
