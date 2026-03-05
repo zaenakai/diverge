@@ -25,6 +25,11 @@ export default $config({
 
     // ── Data Collection Crons ────────────────────────────
 
+    // Shared function config — tell esbuild to bundle deps from root
+    const nodejsConfig = {
+      nodejs: { install: ["drizzle-orm", "pg"] },
+    };
+
     new sst.aws.Cron("MarketCollector", {
       schedule: "rate(5 minutes)",
       function: {
@@ -32,6 +37,7 @@ export default $config({
         timeout: "120 seconds",
         memory: "512 MB",
         link: [databaseUrl],
+        ...nodejsConfig,
       },
     });
 
@@ -42,6 +48,7 @@ export default $config({
         timeout: "60 seconds",
         memory: "256 MB",
         link: [databaseUrl],
+        ...nodejsConfig,
       },
     });
 
@@ -52,6 +59,7 @@ export default $config({
         timeout: "120 seconds",
         memory: "512 MB",
         link: [databaseUrl],
+        ...nodejsConfig,
       },
     });
 
@@ -62,6 +70,7 @@ export default $config({
         timeout: "60 seconds",
         memory: "256 MB",
         link: [databaseUrl],
+        ...nodejsConfig,
       },
     });
 
@@ -72,6 +81,7 @@ export default $config({
         timeout: "300 seconds",
         memory: "512 MB",
         link: [databaseUrl],
+        ...nodejsConfig,
       },
     });
 
@@ -82,6 +92,7 @@ export default $config({
       memory: "256 MB",
       url: true,
       link: [databaseUrl, stripeSecretKey, stripeWebhookSecret],
+      ...nodejsConfig,
     });
 
     // ── Next.js Frontend ─────────────────────────────────
