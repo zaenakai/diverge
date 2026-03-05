@@ -157,7 +157,7 @@ export async function handler() {
     const availableKl = kl.filter((k) => !usedKalshi.has(k.id));
     if (availableKl.length === 0) continue;
 
-    const matches = findMatches([pm], availableKl, 0.55);
+    const matches = findMatches([pm], availableKl, 0.70);
 
     for (const match of matches) {
       if (usedKalshi.has(match.marketB.id)) continue;

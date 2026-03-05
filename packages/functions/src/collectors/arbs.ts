@@ -7,7 +7,7 @@
  */
 
 import { db, schema } from "../../../core/src/db/index";
-import { eq, and, isNull, gt, or } from "drizzle-orm";
+import { eq, and, isNull, gt, gte, or } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 // Platform fee estimates (conservative)
@@ -17,6 +17,7 @@ const FEES: Record<string, number> = {
 };
 
 const MIN_ADJUSTED_SPREAD = 0.01;
+const MAX_SPREAD = 0.50;           // 50% cap — anything higher is almost certainly a bad match
 const MIN_VOLUME_24H = 100;        // $100 minimum 24h volume on BOTH sides
 const MIN_LIQUIDITY = 50;          // $50 minimum liquidity
 const MIN_HOURS_REMAINING = 1;     // Skip markets expiring within 1 hour
@@ -59,7 +60,7 @@ function calculateArb(
     const sellFee = (FEES[s.sellPlatform] ?? 0) * (1 - s.sellPrice);
     const adjustedSpread = s.raw - buyFee - sellFee;
 
-    if (adjustedSpread > MIN_ADJUSTED_SPREAD) {
+    if (adjustedSpread > MIN_ADJUSTED_SPREAD && s.raw <= MAX_SPREAD) {
       return {
         matchId,
         spreadRaw: s.raw,
@@ -82,10 +83,11 @@ export async function handler() {
   const platA = alias(schema.platforms, "platA");
   const platB = alias(schema.platforms, "platB");
 
-  // Fetch all matched markets with explicit joins (no lateral joins)
+  // Only consider high-confidence matches (≥0.70)
   const rows = await db
     .select({
       matchId: schema.marketMatches.id,
+      confidence: schema.marketMatches.confidence,
       // Market A
       aStatus: mktA.status,
       aYesPrice: mktA.yesPrice,
@@ -105,7 +107,8 @@ export async function handler() {
     .innerJoin(mktA, eq(schema.marketMatches.marketAId, mktA.id))
     .innerJoin(mktB, eq(schema.marketMatches.marketBId, mktB.id))
     .innerJoin(platA, eq(mktA.platformId, platA.id))
-    .innerJoin(platB, eq(mktB.platformId, platB.id));
+    .innerJoin(platB, eq(mktB.platformId, platB.id))
+    .where(gte(schema.marketMatches.confidence, 0.70));
 
   const now = new Date();
   const minExpiry = new Date(now.getTime() + MIN_HOURS_REMAINING * 60 * 60 * 1000);
@@ -136,6 +139,14 @@ export async function handler() {
     const priceB = match.bYesPrice ? Number(match.bYesPrice) : null;
 
     if (priceA === null || priceB === null) continue;
+
+    // Skip price inversions — if one is near 0 and the other near 1, they likely
+    // represent opposite sides of the same outcome (e.g., "above $X" vs "below $X")
+    // or the matcher paired them wrong. Real arbs have prices on the SAME side.
+    const bothLow = priceA < 0.10 && priceB < 0.10;
+    const bothHigh = priceA > 0.90 && priceB > 0.90;
+    const inverted = (priceA < 0.10 && priceB > 0.90) || (priceA > 0.90 && priceB < 0.10);
+    if (inverted) continue;
 
     const polyPrice = match.aPlatformSlug === "polymarket" ? priceA : priceB;
     const kalshiPrice = match.aPlatformSlug === "kalshi" ? priceA : priceB;
