@@ -244,15 +244,20 @@ export default function MarketsPage() {
   const [sort, setSort] = useState<SortType>("volume");
   const [allMarkets, setAllMarkets] = useState<ExplorerMarket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(true);
+  const [offset, setOffset] = useState(0);
+  const PAGE_SIZE = 60;
 
+  // Initial load
   useEffect(() => {
     let cancelled = false;
 
     async function fetchData() {
       try {
         const [marketsRes, matchesRes] = await Promise.all([
-          getMarkets({ limit: 200 }),
+          getMarkets({ limit: PAGE_SIZE, offset: 0 }),
           getMatches({ limit: 200 }),
         ]);
 
@@ -272,6 +277,8 @@ export default function MarketsPage() {
           .map(apiMarketToExplorer);
 
         setAllMarkets([...matchedExplorer, ...singleExplorer]);
+        setOffset(PAGE_SIZE);
+        setHasMore(marketsRes.markets.length >= PAGE_SIZE);
         setError(null);
       } catch (err: any) {
         console.error("[Markets] Failed to fetch data:", err);
@@ -286,6 +293,23 @@ export default function MarketsPage() {
     fetchData();
     return () => { cancelled = true; };
   }, []);
+
+  // Load more
+  async function loadMore() {
+    if (loadingMore || !hasMore) return;
+    setLoadingMore(true);
+    try {
+      const res = await getMarkets({ limit: PAGE_SIZE, offset });
+      const newMarkets = res.markets.map(apiMarketToExplorer);
+      setAllMarkets((prev) => [...prev, ...newMarkets]);
+      setOffset((prev) => prev + PAGE_SIZE);
+      setHasMore(res.markets.length >= PAGE_SIZE);
+    } catch (err) {
+      console.error("Failed to load more:", err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }
 
   const { matchedMarkets, singleMarkets, totalCount, filteredCount } =
     useMemo(() => {
@@ -504,6 +528,20 @@ export default function MarketsPage() {
       {matchedMarkets.length === 0 && singleMarkets.length === 0 && !loading && (
         <div className="text-center py-16 text-white/30 text-sm">
           No markets match your search.
+        </div>
+      )}
+
+      {/* Load More */}
+      {hasMore && !loading && filter === "all" && !search && (
+        <div className="flex justify-center pt-2">
+          <Button
+            onClick={loadMore}
+            disabled={loadingMore}
+            variant="outline"
+            className="border-white/10 bg-white/[0.03] text-white/60 hover:bg-white/[0.06] hover:text-white px-8"
+          >
+            {loadingMore ? "Loading..." : "Load More Markets"}
+          </Button>
         </div>
       )}
 
