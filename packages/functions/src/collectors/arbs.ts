@@ -5,7 +5,7 @@
  * If spread > threshold after fees, records an arb opportunity.
  */
 
-import { db, schema } from "../../../core/src/db/index.js";
+import { db, schema } from "../../../core/src/db/index";
 import { eq, and, isNull } from "drizzle-orm";
 
 // Platform fee estimates (conservative)

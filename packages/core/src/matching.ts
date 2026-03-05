@@ -9,7 +9,7 @@
  * 5. Manual curation for ambiguous cases
  */
 
-import type { Market, MatchMethod } from "./types.js";
+import type { Market, MatchMethod } from "./types";
 
 interface MatchCandidate {
   marketA: Market;

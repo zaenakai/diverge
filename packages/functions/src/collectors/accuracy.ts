@@ -10,8 +10,8 @@
  * - 1.0 = perfectly wrong
  */
 
-import type { CalibrationPoint } from "../../../core/src/types.js";
-import { db, schema } from "../../../core/src/db/index.js";
+import type { CalibrationPoint } from "../../../core/src/types";
+import { db, schema } from "../../../core/src/db/index";
 import { eq, and, isNotNull, desc, lte, sql } from "drizzle-orm";
 
 function brierScore(forecast: number, outcome: number): number {

@@ -13,7 +13,7 @@
  *   GET /whales        — recent large trades
  */
 
-import { db, schema } from "../../../core/src/db/index.js";
+import { db, schema } from "../../../core/src/db/index";
 import {
   eq,
   and,

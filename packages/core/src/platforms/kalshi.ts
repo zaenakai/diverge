@@ -102,6 +102,52 @@ export async function fetchOrderBook(ticker: string): Promise<KalshiOrderBook> {
   return res.json();
 }
 
+async function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function fetchAllActiveEvents(): Promise<KalshiEvent[]> {
+  const all: KalshiEvent[] = [];
+  let cursor: string | undefined;
+
+  while (true) {
+    let result: { events: KalshiEvent[]; cursor: string };
+    let retries = 0;
+
+    while (true) {
+      try {
+        result = await fetchEvents({
+          limit: 100,
+          cursor,
+          status: "open",
+          with_nested_markets: true,
+        });
+        break;
+      } catch (err: any) {
+        if (err.message?.includes("429") && retries < 5) {
+          retries++;
+          const delay = 2000 * retries;
+          console.log(`[Kalshi] Rate limited, waiting ${delay}ms (retry ${retries})...`);
+          await sleep(delay);
+        } else {
+          throw err;
+        }
+      }
+    }
+
+    all.push(...result!.events);
+    console.log(`[Kalshi] Fetched ${result!.events.length} events (total: ${all.length})`);
+
+    cursor = result!.cursor;
+    if (!cursor || result!.events.length === 0) break;
+
+    // Small delay between pages to avoid rate limits
+    await sleep(300);
+  }
+
+  return all;
+}
+
 export function getMidPrice(market: KalshiMarket): { yes: number; no: number } {
   return {
     yes: (market.yes_bid + market.yes_ask) / 2 / 100, // Kalshi uses cents

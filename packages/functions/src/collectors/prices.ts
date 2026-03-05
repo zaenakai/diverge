@@ -4,7 +4,7 @@
  * Snapshots current prices for all active markets into price_snapshots.
  */
 
-import { db, schema } from "../../../core/src/db/index.js";
+import { db, schema } from "../../../core/src/db/index";
 import { eq } from "drizzle-orm";
 
 export async function handler() {
