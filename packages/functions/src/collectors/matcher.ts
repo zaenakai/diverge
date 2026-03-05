@@ -15,11 +15,11 @@ import type { Market } from "../../../core/src/types";
 import { db, schema } from "../../../core/src/db/index";
 import { eq, and, or, gt, sql, isNotNull, desc } from "drizzle-orm";
 
-/** Convert a DB market row (with platform) to the core Market type */
+/** Convert a DB market row (flat with platformSlug/platformName) to the core Market type */
 function toMarketType(row: any): Market {
   return {
     id: row.id,
-    platform: row.platform.slug as Market["platform"],
+    platform: (row.platformSlug ?? row.platform?.slug) as Market["platform"],
     externalId: row.externalId,
     title: row.title,
     description: row.description ?? undefined,
@@ -74,21 +74,43 @@ export async function handler() {
   }
 
   // Fetch ACTIVE markets with meaningful volume or liquidity
-  // Limit to top markets by volume to keep matching tractable
-  const allMarkets = await db.query.markets.findMany({
-    where: and(
-      eq(schema.markets.status, "active"),
-      isNotNull(schema.markets.yesPrice),
-      // Only markets with some volume or liquidity
-      or(
-        gt(schema.markets.volume24h, "0"),
-        gt(schema.markets.liquidity, "0"),
+  // Use explicit join (no lateral joins — Aurora doesn't support them)
+  const allMarkets = await db
+    .select({
+      id: schema.markets.id,
+      externalId: schema.markets.externalId,
+      title: schema.markets.title,
+      description: schema.markets.description,
+      category: schema.markets.category,
+      status: schema.markets.status,
+      resolutionDate: schema.markets.resolutionDate,
+      resolvedAt: schema.markets.resolvedAt,
+      outcome: schema.markets.outcome,
+      url: schema.markets.url,
+      yesPrice: schema.markets.yesPrice,
+      noPrice: schema.markets.noPrice,
+      volume24h: schema.markets.volume24h,
+      liquidity: schema.markets.liquidity,
+      metadata: schema.markets.metadata,
+      createdAt: schema.markets.createdAt,
+      updatedAt: schema.markets.updatedAt,
+      platformSlug: schema.platforms.slug,
+      platformName: schema.platforms.name,
+    })
+    .from(schema.markets)
+    .innerJoin(schema.platforms, eq(schema.markets.platformId, schema.platforms.id))
+    .where(
+      and(
+        eq(schema.markets.status, "active"),
+        isNotNull(schema.markets.yesPrice),
+        or(
+          gt(schema.markets.volume24h, "0"),
+          gt(schema.markets.liquidity, "0"),
+        ),
       ),
-    ),
-    with: { platform: { columns: { slug: true, name: true } } },
-    orderBy: [desc(schema.markets.volume24h)],
-    limit: 10000, // Top 10K by volume — covers anything worth matching
-  });
+    )
+    .orderBy(desc(schema.markets.volume24h))
+    .limit(10000);
 
   // Split by platform and filter already-matched
   const polymarketMarkets: Market[] = [];
@@ -98,9 +120,9 @@ export async function handler() {
     if (matchedIds.has(m.id)) continue;
 
     const converted = toMarketType(m);
-    if ((m.platform as any).slug === "polymarket") {
+    if (m.platformSlug === "polymarket") {
       polymarketMarkets.push(converted);
-    } else if ((m.platform as any).slug === "kalshi") {
+    } else if (m.platformSlug === "kalshi") {
       kalshiMarkets.push(converted);
     }
   }
@@ -162,22 +184,28 @@ export async function handler() {
     for (const match of matches) {
       if (usedKalshi.has(match.marketB.id)) continue;
 
-      await db
-        .insert(schema.marketMatches)
-        .values({
-          marketAId: match.marketA.id,
-          marketBId: match.marketB.id,
-          confidence: match.confidence,
-          matchMethod: match.method,
-          verified: false,
-        })
-        .onConflictDoUpdate({
-          target: [schema.marketMatches.marketAId, schema.marketMatches.marketBId],
+      try {
+        await db
+          .insert(schema.marketMatches)
+          .values({
+            marketAId: match.marketA.id,
+            marketBId: match.marketB.id,
+            confidence: match.confidence,
+            matchMethod: match.method,
+            verified: false,
+          })
+          .onConflictDoUpdate({
+            target: [schema.marketMatches.marketAId, schema.marketMatches.marketBId],
           set: {
             confidence: match.confidence,
             matchMethod: match.method,
           },
         });
+      } catch (err: any) {
+        // Skip FK violations from stale/deleted markets
+        if (err?.cause?.code === '23503') continue;
+        throw err;
+      }
       usedKalshi.add(match.marketB.id);
       matchCount++;
     }

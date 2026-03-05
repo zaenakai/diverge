@@ -156,13 +156,30 @@ export function findMatches(
       const pmf = pm.features;
       const kmf = km.features;
 
-      // Must share entity + date + threshold/direction
+      // Must share entity + additional structural features
       if (pmf.entity && pmf.entity === kmf.entity) {
-        let confidence = 0.6;
+        let confidence = 0.5; // Entity alone is weak — needs more signal
 
         if (pmf.date && kmf.date && pmf.date === kmf.date) confidence += 0.15;
-        if (pmf.threshold && kmf.threshold && Math.abs(pmf.threshold - kmf.threshold) < 1) confidence += 0.15;
-        if (pmf.direction && pmf.direction === kmf.direction) confidence += 0.1;
+        if (pmf.direction && pmf.direction === kmf.direction) confidence += 0.05;
+
+        // Threshold matching is critical for price-based markets
+        if (pmf.threshold && kmf.threshold) {
+          const ratio = Math.min(pmf.threshold, kmf.threshold) / Math.max(pmf.threshold, kmf.threshold);
+          if (ratio >= 0.90) {
+            // Within 10% of each other (e.g., $100K vs $100K, or $95K vs $100K)
+            confidence += 0.25;
+          } else if (ratio >= 0.70) {
+            // Somewhat close (e.g., $85K vs $100K) — slight boost but not enough alone
+            confidence += 0.10;
+          } else {
+            // Very different targets (e.g., $72K vs $130K) — penalize
+            confidence -= 0.10;
+          }
+        } else if (pmf.threshold || kmf.threshold) {
+          // One has a threshold, the other doesn't — weak match
+          confidence -= 0.05;
+        }
 
         if (confidence >= minConfidence) {
           matches.push({
