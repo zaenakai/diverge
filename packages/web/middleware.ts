@@ -5,8 +5,7 @@ const publicPaths = new Set(["/", "/markets", "/compare", "/arbs", "/accuracy", 
 
 function isPublicPath(pathname: string): boolean {
   if (publicPaths.has(pathname)) return true;
-  if (pathname.startsWith("/api/auth")) return true;
-  if (pathname === "/api/stripe/webhook") return true;
+  if (pathname.startsWith("/api/")) return true;
   if (pathname.startsWith("/_next") || pathname.startsWith("/favicon") || pathname.includes(".")) return true;
   return false;
 }

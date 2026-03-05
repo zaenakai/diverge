@@ -121,6 +121,14 @@ export default $config({
         NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_live_51T7hzB2UO0ITF91UrnQXawRoKuwWYXmLbjxQX97gc2bT8dLpVKt2H6D2KiM50CMqcdLLpxj2EkxZSZYrhLLqV8Eh00bhhyD80J",
         STRIPE_PRO_PRICE_ID: "price_1T7iE42UO0ITF91UTDDKftgH",
         STRIPE_ENTERPRISE_PRICE_ID: "price_1T7iEm2UO0ITF91UzLUuByuw",
+        STRIPE_SECRET_KEY: stripeSecretKey.value,
+        STRIPE_WEBHOOK_SECRET: stripeWebhookSecret.value,
+        NEXTAUTH_SECRET: nextAuthSecret.value,
+        NEXTAUTH_URL: "https://diverge.market",
+        GOOGLE_CLIENT_ID: googleClientId.value,
+        GOOGLE_CLIENT_SECRET: googleClientSecret.value,
+        TWITTER_CLIENT_ID: twitterClientId.value,
+        TWITTER_CLIENT_SECRET: twitterClientSecret.value,
       },
     });
 

@@ -46,19 +46,25 @@ export function Nav() {
                 {item.label}
               </Link>
             ))}
-            <Badge variant="outline" className="ml-2 border-emerald-500/30 text-emerald-400 text-[10px] cursor-pointer hover:bg-emerald-500/10">
-              PRO
-            </Badge>
+            <Link href="/pricing">
+              <Badge variant="outline" className="ml-2 border-emerald-500/30 text-emerald-400 text-[10px] cursor-pointer hover:bg-emerald-500/10">
+                PRO
+              </Badge>
+            </Link>
           </div>
 
           {/* Right side */}
           <div className="hidden md:flex items-center gap-3">
-            <Button variant="ghost" size="sm" className="text-white/50 hover:text-white text-sm">
-              Sign In
-            </Button>
-            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm">
-              Sign Up
-            </Button>
+            <Link href="/login">
+              <Button variant="ghost" size="sm" className="text-white/50 hover:text-white text-sm">
+                Sign In
+              </Button>
+            </Link>
+            <Link href="/pricing">
+              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm">
+                Get Pro
+              </Button>
+            </Link>
           </div>
 
           {/* Mobile menu */}
@@ -87,12 +93,16 @@ export function Nav() {
                   </Link>
                 ))}
                 <div className="border-t border-white/10 mt-4 pt-4 flex flex-col gap-2 px-4">
-                  <Button variant="ghost" size="sm" className="text-white/50 justify-start">
-                    Sign In
-                  </Button>
-                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white">
-                    Sign Up
-                  </Button>
+                  <Link href="/login" onClick={() => setOpen(false)}>
+                    <Button variant="ghost" size="sm" className="text-white/50 justify-start w-full">
+                      Sign In
+                    </Button>
+                  </Link>
+                  <Link href="/pricing" onClick={() => setOpen(false)}>
+                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white w-full">
+                      Get Pro
+                    </Button>
+                  </Link>
                 </div>
               </div>
             </SheetContent>
