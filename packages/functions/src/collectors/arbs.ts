@@ -2,11 +2,13 @@
  * Arb Detector — runs every 2 minutes
  *
  * For each matched market pair, calculates the price spread.
+ * Filters out dead/expired/illiquid markets.
  * If spread > threshold after fees, records an arb opportunity.
  */
 
 import { db, schema } from "../../../core/src/db/index";
-import { eq, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, gt, or } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 // Platform fee estimates (conservative)
 const FEES: Record<string, number> = {
@@ -15,6 +17,9 @@ const FEES: Record<string, number> = {
 };
 
 const MIN_ADJUSTED_SPREAD = 0.01;
+const MIN_VOLUME_24H = 100;        // $100 minimum 24h volume on BOTH sides
+const MIN_LIQUIDITY = 50;          // $50 minimum liquidity
+const MIN_HOURS_REMAINING = 1;     // Skip markets expiring within 1 hour
 
 interface ArbCalc {
   matchId: number;
@@ -72,32 +77,70 @@ function calculateArb(
 export async function handler() {
   console.log("[ArbDetector] Scanning for arbitrage opportunities...");
 
-  // Fetch all active matched markets with prices
-  const matches = await db.query.marketMatches.findMany({
-    with: {
-      marketA: { with: { platform: true } },
-      marketB: { with: { platform: true } },
-    },
+  const mktA = alias(schema.markets, "mktA");
+  const mktB = alias(schema.markets, "mktB");
+  const platA = alias(schema.platforms, "platA");
+  const platB = alias(schema.platforms, "platB");
+
+  // Fetch all matched markets with explicit joins (no lateral joins)
+  const rows = await db
+    .select({
+      matchId: schema.marketMatches.id,
+      // Market A
+      aStatus: mktA.status,
+      aYesPrice: mktA.yesPrice,
+      aVolume24h: mktA.volume24h,
+      aLiquidity: mktA.liquidity,
+      aResolutionDate: mktA.resolutionDate,
+      aPlatformSlug: platA.slug,
+      // Market B
+      bStatus: mktB.status,
+      bYesPrice: mktB.yesPrice,
+      bVolume24h: mktB.volume24h,
+      bLiquidity: mktB.liquidity,
+      bResolutionDate: mktB.resolutionDate,
+      bPlatformSlug: platB.slug,
+    })
+    .from(schema.marketMatches)
+    .innerJoin(mktA, eq(schema.marketMatches.marketAId, mktA.id))
+    .innerJoin(mktB, eq(schema.marketMatches.marketBId, mktB.id))
+    .innerJoin(platA, eq(mktA.platformId, platA.id))
+    .innerJoin(platB, eq(mktB.platformId, platB.id));
+
+  const now = new Date();
+  const minExpiry = new Date(now.getTime() + MIN_HOURS_REMAINING * 60 * 60 * 1000);
+
+  // Filter: both active, both have volume, both have time remaining
+  const activeMatches = rows.filter((m) => {
+    if (m.aStatus !== "active" || m.bStatus !== "active") return false;
+
+    const aVol = Number(m.aVolume24h ?? 0);
+    const bVol = Number(m.bVolume24h ?? 0);
+    if (aVol < MIN_VOLUME_24H || bVol < MIN_VOLUME_24H) return false;
+
+    const aLiq = Number(m.aLiquidity ?? 0);
+    const bLiq = Number(m.bLiquidity ?? 0);
+    if (aLiq < MIN_LIQUIDITY && bLiq < MIN_LIQUIDITY) return false;
+
+    // Skip if either market expires too soon
+    if (m.aResolutionDate && new Date(m.aResolutionDate) < minExpiry) return false;
+    if (m.bResolutionDate && new Date(m.bResolutionDate) < minExpiry) return false;
+
+    return true;
   });
 
-  // Filter to only active market pairs
-  const activeMatches = matches.filter(
-    (m) => m.marketA.status === "active" && m.marketB.status === "active"
-  );
-
   let arbCount = 0;
-  const now = new Date();
 
   for (const match of activeMatches) {
-    const priceA = match.marketA.yesPrice ? Number(match.marketA.yesPrice) : null;
-    const priceB = match.marketB.yesPrice ? Number(match.marketB.yesPrice) : null;
+    const priceA = match.aYesPrice ? Number(match.aYesPrice) : null;
+    const priceB = match.bYesPrice ? Number(match.bYesPrice) : null;
 
     if (priceA === null || priceB === null) continue;
 
-    const polyPrice = match.marketA.platform.slug === "polymarket" ? priceA : priceB;
-    const kalshiPrice = match.marketA.platform.slug === "kalshi" ? priceA : priceB;
+    const polyPrice = match.aPlatformSlug === "polymarket" ? priceA : priceB;
+    const kalshiPrice = match.aPlatformSlug === "kalshi" ? priceA : priceB;
 
-    const arb = calculateArb(match.id, polyPrice, kalshiPrice);
+    const arb = calculateArb(match.matchId, polyPrice, kalshiPrice);
 
     if (arb) {
       // Close any previous open arbs for this match
@@ -106,7 +149,7 @@ export async function handler() {
         .set({ closedAt: now })
         .where(
           and(
-            eq(schema.arbOpportunities.matchId, match.id),
+            eq(schema.arbOpportunities.matchId, match.matchId),
             isNull(schema.arbOpportunities.closedAt)
           )
         );
@@ -120,8 +163,8 @@ export async function handler() {
         buyPrice: arb.buyPrice.toString(),
         sellPrice: arb.sellPrice.toString(),
         volumeMin: Math.min(
-          Number(match.marketA.liquidity ?? 0),
-          Number(match.marketB.liquidity ?? 0)
+          Number(match.aLiquidity ?? 0),
+          Number(match.bLiquidity ?? 0)
         ).toString(),
       });
       arbCount++;
@@ -132,15 +175,15 @@ export async function handler() {
         .set({ closedAt: now, profitable: false })
         .where(
           and(
-            eq(schema.arbOpportunities.matchId, match.id),
+            eq(schema.arbOpportunities.matchId, match.matchId),
             isNull(schema.arbOpportunities.closedAt)
           )
         );
     }
   }
 
-  console.log(`[ArbDetector] Found ${arbCount} arb opportunities from ${activeMatches.length} matched pairs.`);
-  return { arbCount, matchesScanned: activeMatches.length };
+  console.log(`[ArbDetector] Found ${arbCount} arbs from ${activeMatches.length} active pairs (${rows.length} total matches, ${rows.length - activeMatches.length} filtered out).`);
+  return { arbCount, matchesScanned: activeMatches.length, totalMatches: rows.length };
 }
 
 export { calculateArb };
