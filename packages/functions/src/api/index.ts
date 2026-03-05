@@ -29,6 +29,7 @@ import {
   ilike,
   gte,
 } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 
 // ── CORS + Routing ──────────────────────────────────
 
@@ -179,7 +180,7 @@ async function getMarkets(params: Record<string, string>) {
   const conditions: any[] = [];
 
   if (platform && platform !== "all") {
-    // Need to join with platforms
+    conditions.push(eq(schema.platforms.slug, platform));
   }
   if (category) {
     conditions.push(eq(schema.markets.category, category));
@@ -193,34 +194,71 @@ async function getMarkets(params: Record<string, string>) {
     conditions.push(ilike(schema.markets.title, `%${search}%`));
   }
 
-  // Use query API for includes
-  const marketsData = await db.query.markets.findMany({
-    where: conditions.length > 0 ? and(...conditions) : undefined,
-    with: {
-      platform: {
-        columns: { slug: true, name: true },
-      },
-    },
-    orderBy: [desc(schema.markets.volume24h)],
-    limit,
-    offset,
+  const where = conditions.length > 0 ? and(...conditions) : undefined;
+
+  const rows = await db
+    .select({
+      id: schema.markets.id,
+      platformId: schema.markets.platformId,
+      externalId: schema.markets.externalId,
+      title: schema.markets.title,
+      description: schema.markets.description,
+      category: schema.markets.category,
+      status: schema.markets.status,
+      resolutionDate: schema.markets.resolutionDate,
+      resolvedAt: schema.markets.resolvedAt,
+      outcome: schema.markets.outcome,
+      url: schema.markets.url,
+      yesPrice: schema.markets.yesPrice,
+      noPrice: schema.markets.noPrice,
+      volume24h: schema.markets.volume24h,
+      liquidity: schema.markets.liquidity,
+      metadata: schema.markets.metadata,
+      createdAt: schema.markets.createdAt,
+      updatedAt: schema.markets.updatedAt,
+      platformSlug: schema.platforms.slug,
+      platformName: schema.platforms.name,
+    })
+    .from(schema.markets)
+    .innerJoin(schema.platforms, eq(schema.markets.platformId, schema.platforms.id))
+    .where(where)
+    .orderBy(desc(schema.markets.volume24h))
+    .limit(limit)
+    .offset(offset);
+
+  const marketsData = rows.map((r) => {
+    const { platformSlug, platformName, ...market } = r;
+    return { ...market, platform: { slug: platformSlug, name: platformName } };
   });
 
-  // Filter by platform slug if needed (post-query since relational query doesn't support join filtering easily)
-  let filtered = marketsData;
+  // Count query (without platform join if no platform filter)
+  const countConditions: any[] = [];
   if (platform && platform !== "all") {
-    filtered = marketsData.filter((m) => m.platform.slug === platform);
+    // Need join for count too
+  }
+  if (category) countConditions.push(eq(schema.markets.category, category));
+  if (status) countConditions.push(eq(schema.markets.status, status));
+  else countConditions.push(eq(schema.markets.status, "active"));
+  if (search) countConditions.push(ilike(schema.markets.title, `%${search}%`));
+
+  let totalQuery;
+  if (platform && platform !== "all") {
+    totalQuery = db
+      .select({ count: count() })
+      .from(schema.markets)
+      .innerJoin(schema.platforms, eq(schema.markets.platformId, schema.platforms.id))
+      .where(and(eq(schema.platforms.slug, platform), ...countConditions));
+  } else {
+    totalQuery = db
+      .select({ count: count() })
+      .from(schema.markets)
+      .where(countConditions.length > 0 ? and(...countConditions) : undefined);
   }
 
-  // Get total count
-  const where = conditions.length > 0 ? and(...conditions) : undefined;
-  const totalResult = await db
-    .select({ count: count() })
-    .from(schema.markets)
-    .where(where);
+  const totalResult = await totalQuery;
 
   return {
-    markets: filtered.map(numericFields),
+    markets: marketsData.map(numericFields),
     total: totalResult[0].count,
     limit,
     offset,
@@ -235,58 +273,158 @@ async function getMarketDetail(id: string) {
     return { error: "Invalid market ID" };
   }
 
-  const market = await db.query.markets.findFirst({
-    where: eq(schema.markets.id, marketId),
-    with: {
-      platform: { columns: { slug: true, name: true } },
-      priceSnapshots: {
-        orderBy: [desc(schema.priceSnapshots.recordedAt)],
-        limit: 500,
-        columns: {
-          yesPrice: true,
-          noPrice: true,
-          volume24h: true,
-          liquidity: true,
-          recordedAt: true,
-        },
-      },
-      matchesAsA: {
-        with: {
-          marketB: {
-            with: { platform: { columns: { slug: true, name: true } } },
-          },
-        },
-      },
-      matchesAsB: {
-        with: {
-          marketA: {
-            with: { platform: { columns: { slug: true, name: true } } },
-          },
-        },
-      },
-    },
-  });
+  // Query 1: Market + platform
+  const marketRows = await db
+    .select({
+      id: schema.markets.id,
+      platformId: schema.markets.platformId,
+      externalId: schema.markets.externalId,
+      title: schema.markets.title,
+      description: schema.markets.description,
+      category: schema.markets.category,
+      status: schema.markets.status,
+      resolutionDate: schema.markets.resolutionDate,
+      resolvedAt: schema.markets.resolvedAt,
+      outcome: schema.markets.outcome,
+      url: schema.markets.url,
+      yesPrice: schema.markets.yesPrice,
+      noPrice: schema.markets.noPrice,
+      volume24h: schema.markets.volume24h,
+      liquidity: schema.markets.liquidity,
+      metadata: schema.markets.metadata,
+      createdAt: schema.markets.createdAt,
+      updatedAt: schema.markets.updatedAt,
+      platformSlug: schema.platforms.slug,
+      platformName: schema.platforms.name,
+    })
+    .from(schema.markets)
+    .innerJoin(schema.platforms, eq(schema.markets.platformId, schema.platforms.id))
+    .where(eq(schema.markets.id, marketId))
+    .limit(1);
 
-  if (!market) {
+  if (marketRows.length === 0) {
     return { error: "Market not found" };
   }
 
-  const matches = [
-    ...market.matchesAsA.map((m) => ({
-      matchId: m.id,
-      confidence: m.confidence,
-      matchMethod: m.matchMethod,
-      otherMarket: numericFields(m.marketB),
-    })),
-    ...market.matchesAsB.map((m) => ({
-      matchId: m.id,
-      confidence: m.confidence,
-      matchMethod: m.matchMethod,
-      otherMarket: numericFields(m.marketA),
-    })),
-  ];
+  const row = marketRows[0];
+  const { platformSlug, platformName, ...marketFields } = row;
+  const marketData = { ...marketFields, platform: { slug: platformSlug, name: platformName } };
 
-  const { matchesAsA, matchesAsB, priceSnapshots, ...marketData } = market;
+  // Query 2: Price snapshots
+  const priceSnapshots = await db
+    .select({
+      yesPrice: schema.priceSnapshots.yesPrice,
+      noPrice: schema.priceSnapshots.noPrice,
+      volume24h: schema.priceSnapshots.volume24h,
+      liquidity: schema.priceSnapshots.liquidity,
+      recordedAt: schema.priceSnapshots.recordedAt,
+    })
+    .from(schema.priceSnapshots)
+    .where(eq(schema.priceSnapshots.marketId, marketId))
+    .orderBy(desc(schema.priceSnapshots.recordedAt))
+    .limit(500);
+
+  // Query 3: Matches where this market is A — join marketB + its platform
+  const otherMarket = alias(schema.markets, "otherMarket");
+  const otherPlatform = alias(schema.platforms, "otherPlatform");
+
+  const matchesAsA = await db
+    .select({
+      matchId: schema.marketMatches.id,
+      confidence: schema.marketMatches.confidence,
+      matchMethod: schema.marketMatches.matchMethod,
+      otherMarketId: otherMarket.id,
+      otherPlatformId: otherMarket.platformId,
+      otherExternalId: otherMarket.externalId,
+      otherTitle: otherMarket.title,
+      otherDescription: otherMarket.description,
+      otherCategory: otherMarket.category,
+      otherStatus: otherMarket.status,
+      otherResolutionDate: otherMarket.resolutionDate,
+      otherResolvedAt: otherMarket.resolvedAt,
+      otherOutcome: otherMarket.outcome,
+      otherUrl: otherMarket.url,
+      otherYesPrice: otherMarket.yesPrice,
+      otherNoPrice: otherMarket.noPrice,
+      otherVolume24h: otherMarket.volume24h,
+      otherLiquidity: otherMarket.liquidity,
+      otherMetadata: otherMarket.metadata,
+      otherCreatedAt: otherMarket.createdAt,
+      otherUpdatedAt: otherMarket.updatedAt,
+      otherPlatformSlug: otherPlatform.slug,
+      otherPlatformName: otherPlatform.name,
+    })
+    .from(schema.marketMatches)
+    .innerJoin(otherMarket, eq(schema.marketMatches.marketBId, otherMarket.id))
+    .innerJoin(otherPlatform, eq(otherMarket.platformId, otherPlatform.id))
+    .where(eq(schema.marketMatches.marketAId, marketId));
+
+  // Query 4: Matches where this market is B — join marketA + its platform
+  const otherMarket2 = alias(schema.markets, "otherMarket2");
+  const otherPlatform2 = alias(schema.platforms, "otherPlatform2");
+
+  const matchesAsB = await db
+    .select({
+      matchId: schema.marketMatches.id,
+      confidence: schema.marketMatches.confidence,
+      matchMethod: schema.marketMatches.matchMethod,
+      otherMarketId: otherMarket2.id,
+      otherPlatformId: otherMarket2.platformId,
+      otherExternalId: otherMarket2.externalId,
+      otherTitle: otherMarket2.title,
+      otherDescription: otherMarket2.description,
+      otherCategory: otherMarket2.category,
+      otherStatus: otherMarket2.status,
+      otherResolutionDate: otherMarket2.resolutionDate,
+      otherResolvedAt: otherMarket2.resolvedAt,
+      otherOutcome: otherMarket2.outcome,
+      otherUrl: otherMarket2.url,
+      otherYesPrice: otherMarket2.yesPrice,
+      otherNoPrice: otherMarket2.noPrice,
+      otherVolume24h: otherMarket2.volume24h,
+      otherLiquidity: otherMarket2.liquidity,
+      otherMetadata: otherMarket2.metadata,
+      otherCreatedAt: otherMarket2.createdAt,
+      otherUpdatedAt: otherMarket2.updatedAt,
+      otherPlatformSlug: otherPlatform2.slug,
+      otherPlatformName: otherPlatform2.name,
+    })
+    .from(schema.marketMatches)
+    .innerJoin(otherMarket2, eq(schema.marketMatches.marketAId, otherMarket2.id))
+    .innerJoin(otherPlatform2, eq(otherMarket2.platformId, otherPlatform2.id))
+    .where(eq(schema.marketMatches.marketBId, marketId));
+
+  const formatMatchRow = (r: any) => ({
+    matchId: r.matchId,
+    confidence: r.confidence,
+    matchMethod: r.matchMethod,
+    otherMarket: numericFields({
+      id: r.otherMarketId,
+      platformId: r.otherPlatformId,
+      externalId: r.otherExternalId,
+      title: r.otherTitle,
+      description: r.otherDescription,
+      category: r.otherCategory,
+      status: r.otherStatus,
+      resolutionDate: r.otherResolutionDate,
+      resolvedAt: r.otherResolvedAt,
+      outcome: r.otherOutcome,
+      url: r.otherUrl,
+      yesPrice: r.otherYesPrice,
+      noPrice: r.otherNoPrice,
+      volume24h: r.otherVolume24h,
+      liquidity: r.otherLiquidity,
+      metadata: r.otherMetadata,
+      createdAt: r.otherCreatedAt,
+      updatedAt: r.otherUpdatedAt,
+      platform: { slug: r.otherPlatformSlug, name: r.otherPlatformName },
+    }),
+  });
+
+  const matches = [
+    ...matchesAsA.map(formatMatchRow),
+    ...matchesAsB.map(formatMatchRow),
+  ];
 
   return {
     market: numericFields(marketData),
@@ -301,30 +439,106 @@ async function getMatches(params: Record<string, string>) {
   const limit = Math.min(toNumber(params.limit, 50), 200);
   const offset = toNumber(params.offset, 0);
 
-  const matchesData = await db.query.marketMatches.findMany({
-    with: {
-      marketA: { with: { platform: { columns: { slug: true, name: true } } } },
-      marketB: { with: { platform: { columns: { slug: true, name: true } } } },
-    },
-    orderBy: [desc(schema.marketMatches.confidence)],
-    limit,
-    offset,
+  const mktA = alias(schema.markets, "mktA");
+  const mktB = alias(schema.markets, "mktB");
+  const platA = alias(schema.platforms, "platA");
+  const platB = alias(schema.platforms, "platB");
+
+  const rows = await db
+    .select({
+      id: schema.marketMatches.id,
+      confidence: schema.marketMatches.confidence,
+      matchMethod: schema.marketMatches.matchMethod,
+      verified: schema.marketMatches.verified,
+      createdAt: schema.marketMatches.createdAt,
+      // Market A fields
+      aId: mktA.id,
+      aPlatformId: mktA.platformId,
+      aExternalId: mktA.externalId,
+      aTitle: mktA.title,
+      aDescription: mktA.description,
+      aCategory: mktA.category,
+      aStatus: mktA.status,
+      aResolutionDate: mktA.resolutionDate,
+      aResolvedAt: mktA.resolvedAt,
+      aOutcome: mktA.outcome,
+      aUrl: mktA.url,
+      aYesPrice: mktA.yesPrice,
+      aNoPrice: mktA.noPrice,
+      aVolume24h: mktA.volume24h,
+      aLiquidity: mktA.liquidity,
+      aMetadata: mktA.metadata,
+      aCreatedAt: mktA.createdAt,
+      aUpdatedAt: mktA.updatedAt,
+      aPlatformSlug: platA.slug,
+      aPlatformName: platA.name,
+      // Market B fields
+      bId: mktB.id,
+      bPlatformId: mktB.platformId,
+      bExternalId: mktB.externalId,
+      bTitle: mktB.title,
+      bDescription: mktB.description,
+      bCategory: mktB.category,
+      bStatus: mktB.status,
+      bResolutionDate: mktB.resolutionDate,
+      bResolvedAt: mktB.resolvedAt,
+      bOutcome: mktB.outcome,
+      bUrl: mktB.url,
+      bYesPrice: mktB.yesPrice,
+      bNoPrice: mktB.noPrice,
+      bVolume24h: mktB.volume24h,
+      bLiquidity: mktB.liquidity,
+      bMetadata: mktB.metadata,
+      bCreatedAt: mktB.createdAt,
+      bUpdatedAt: mktB.updatedAt,
+      bPlatformSlug: platB.slug,
+      bPlatformName: platB.name,
+    })
+    .from(schema.marketMatches)
+    .innerJoin(mktA, eq(schema.marketMatches.marketAId, mktA.id))
+    .innerJoin(platA, eq(mktA.platformId, platA.id))
+    .innerJoin(mktB, eq(schema.marketMatches.marketBId, mktB.id))
+    .innerJoin(platB, eq(mktB.platformId, platB.id))
+    .orderBy(desc(schema.marketMatches.confidence))
+    .limit(limit)
+    .offset(offset);
+
+  const buildMarket = (r: any, prefix: "a" | "b") => ({
+    id: r[`${prefix}Id`],
+    platformId: r[`${prefix}PlatformId`],
+    externalId: r[`${prefix}ExternalId`],
+    title: r[`${prefix}Title`],
+    description: r[`${prefix}Description`],
+    category: r[`${prefix}Category`],
+    status: r[`${prefix}Status`],
+    resolutionDate: r[`${prefix}ResolutionDate`],
+    resolvedAt: r[`${prefix}ResolvedAt`],
+    outcome: r[`${prefix}Outcome`],
+    url: r[`${prefix}Url`],
+    yesPrice: r[`${prefix}YesPrice`],
+    noPrice: r[`${prefix}NoPrice`],
+    volume24h: r[`${prefix}Volume24h`],
+    liquidity: r[`${prefix}Liquidity`],
+    metadata: r[`${prefix}Metadata`],
+    createdAt: r[`${prefix}CreatedAt`],
+    updatedAt: r[`${prefix}UpdatedAt`],
+    platform: { slug: r[`${prefix}PlatformSlug`], name: r[`${prefix}PlatformName`] },
   });
 
-  const withSpread = matchesData.map((match) => {
-    const priceA = match.marketA.yesPrice ? Number(match.marketA.yesPrice) : 0;
-    const priceB = match.marketB.yesPrice ? Number(match.marketB.yesPrice) : 0;
+  const withSpread = rows.map((r) => {
+    const priceA = r.aYesPrice ? Number(r.aYesPrice) : 0;
+    const priceB = r.bYesPrice ? Number(r.bYesPrice) : 0;
     const spread = Math.abs(priceA - priceB);
 
     return {
-      id: match.id,
-      confidence: match.confidence,
-      matchMethod: match.matchMethod,
-      verified: match.verified,
-      createdAt: match.createdAt,
+      id: r.id,
+      confidence: r.confidence,
+      matchMethod: r.matchMethod,
+      verified: r.verified,
+      createdAt: r.createdAt,
       spread: Math.round(spread * 10000) / 100,
-      marketA: numericFields(match.marketA),
-      marketB: numericFields(match.marketB),
+      marketA: numericFields(buildMarket(r, "a")),
+      marketB: numericFields(buildMarket(r, "b")),
     };
   });
 
@@ -349,36 +563,116 @@ async function getArbs(params: Record<string, string>) {
     conditions.push(gte(schema.arbOpportunities.spreadRaw, minSpread.toString()));
   }
 
-  const arbs = await db.query.arbOpportunities.findMany({
-    where: and(...conditions),
-    with: {
-      match: {
-        with: {
-          marketA: { with: { platform: { columns: { slug: true, name: true } } } },
-          marketB: { with: { platform: { columns: { slug: true, name: true } } } },
-        },
-      },
-    },
-    orderBy: [desc(schema.arbOpportunities.spreadAdjusted)],
-    limit,
-    offset,
+  const arbMktA = alias(schema.markets, "arbMktA");
+  const arbMktB = alias(schema.markets, "arbMktB");
+  const arbPlatA = alias(schema.platforms, "arbPlatA");
+  const arbPlatB = alias(schema.platforms, "arbPlatB");
+
+  const rows = await db
+    .select({
+      id: schema.arbOpportunities.id,
+      matchId: schema.arbOpportunities.matchId,
+      spreadRaw: schema.arbOpportunities.spreadRaw,
+      spreadAdjusted: schema.arbOpportunities.spreadAdjusted,
+      buyPlatform: schema.arbOpportunities.buyPlatform,
+      buyPrice: schema.arbOpportunities.buyPrice,
+      sellPrice: schema.arbOpportunities.sellPrice,
+      volumeMin: schema.arbOpportunities.volumeMin,
+      detectedAt: schema.arbOpportunities.detectedAt,
+      closedAt: schema.arbOpportunities.closedAt,
+      profitable: schema.arbOpportunities.profitable,
+      matchConfidence: schema.marketMatches.confidence,
+      // Market A
+      aId: arbMktA.id,
+      aPlatformId: arbMktA.platformId,
+      aExternalId: arbMktA.externalId,
+      aTitle: arbMktA.title,
+      aDescription: arbMktA.description,
+      aCategory: arbMktA.category,
+      aStatus: arbMktA.status,
+      aResolutionDate: arbMktA.resolutionDate,
+      aResolvedAt: arbMktA.resolvedAt,
+      aOutcome: arbMktA.outcome,
+      aUrl: arbMktA.url,
+      aYesPrice: arbMktA.yesPrice,
+      aNoPrice: arbMktA.noPrice,
+      aVolume24h: arbMktA.volume24h,
+      aLiquidity: arbMktA.liquidity,
+      aMetadata: arbMktA.metadata,
+      aCreatedAt: arbMktA.createdAt,
+      aUpdatedAt: arbMktA.updatedAt,
+      aPlatformSlug: arbPlatA.slug,
+      aPlatformName: arbPlatA.name,
+      // Market B
+      bId: arbMktB.id,
+      bPlatformId: arbMktB.platformId,
+      bExternalId: arbMktB.externalId,
+      bTitle: arbMktB.title,
+      bDescription: arbMktB.description,
+      bCategory: arbMktB.category,
+      bStatus: arbMktB.status,
+      bResolutionDate: arbMktB.resolutionDate,
+      bResolvedAt: arbMktB.resolvedAt,
+      bOutcome: arbMktB.outcome,
+      bUrl: arbMktB.url,
+      bYesPrice: arbMktB.yesPrice,
+      bNoPrice: arbMktB.noPrice,
+      bVolume24h: arbMktB.volume24h,
+      bLiquidity: arbMktB.liquidity,
+      bMetadata: arbMktB.metadata,
+      bCreatedAt: arbMktB.createdAt,
+      bUpdatedAt: arbMktB.updatedAt,
+      bPlatformSlug: arbPlatB.slug,
+      bPlatformName: arbPlatB.name,
+    })
+    .from(schema.arbOpportunities)
+    .innerJoin(schema.marketMatches, eq(schema.arbOpportunities.matchId, schema.marketMatches.id))
+    .innerJoin(arbMktA, eq(schema.marketMatches.marketAId, arbMktA.id))
+    .innerJoin(arbPlatA, eq(arbMktA.platformId, arbPlatA.id))
+    .innerJoin(arbMktB, eq(schema.marketMatches.marketBId, arbMktB.id))
+    .innerJoin(arbPlatB, eq(arbMktB.platformId, arbPlatB.id))
+    .where(and(...conditions))
+    .orderBy(desc(schema.arbOpportunities.spreadAdjusted))
+    .limit(limit)
+    .offset(offset);
+
+  const buildArbMarket = (r: any, prefix: "a" | "b") => ({
+    id: r[`${prefix}Id`],
+    platformId: r[`${prefix}PlatformId`],
+    externalId: r[`${prefix}ExternalId`],
+    title: r[`${prefix}Title`],
+    description: r[`${prefix}Description`],
+    category: r[`${prefix}Category`],
+    status: r[`${prefix}Status`],
+    resolutionDate: r[`${prefix}ResolutionDate`],
+    resolvedAt: r[`${prefix}ResolvedAt`],
+    outcome: r[`${prefix}Outcome`],
+    url: r[`${prefix}Url`],
+    yesPrice: r[`${prefix}YesPrice`],
+    noPrice: r[`${prefix}NoPrice`],
+    volume24h: r[`${prefix}Volume24h`],
+    liquidity: r[`${prefix}Liquidity`],
+    metadata: r[`${prefix}Metadata`],
+    createdAt: r[`${prefix}CreatedAt`],
+    updatedAt: r[`${prefix}UpdatedAt`],
+    platform: { slug: r[`${prefix}PlatformSlug`], name: r[`${prefix}PlatformName`] },
   });
 
-  let results = arbs.map((arb) => ({
-    id: arb.id,
-    matchId: arb.matchId,
-    spreadRaw: arb.spreadRaw ? Number(arb.spreadRaw) : null,
-    spreadAdjusted: arb.spreadAdjusted ? Number(arb.spreadAdjusted) : null,
-    buyPlatform: arb.buyPlatform,
-    buyPrice: arb.buyPrice ? Number(arb.buyPrice) : null,
-    sellPrice: arb.sellPrice ? Number(arb.sellPrice) : null,
-    volumeMin: arb.volumeMin ? Number(arb.volumeMin) : null,
-    detectedAt: arb.detectedAt,
-    closedAt: arb.closedAt,
-    profitable: arb.profitable,
-    marketA: numericFields(arb.match.marketA),
-    marketB: numericFields(arb.match.marketB),
-    confidence: arb.match.confidence,
+  let results = rows.map((r) => ({
+    id: r.id,
+    matchId: r.matchId,
+    spreadRaw: r.spreadRaw ? Number(r.spreadRaw) : null,
+    spreadAdjusted: r.spreadAdjusted ? Number(r.spreadAdjusted) : null,
+    buyPlatform: r.buyPlatform,
+    buyPrice: r.buyPrice ? Number(r.buyPrice) : null,
+    sellPrice: r.sellPrice ? Number(r.sellPrice) : null,
+    volumeMin: r.volumeMin ? Number(r.volumeMin) : null,
+    detectedAt: r.detectedAt,
+    closedAt: r.closedAt,
+    profitable: r.profitable,
+    marketA: numericFields(buildArbMarket(r, "a")),
+    marketB: numericFields(buildArbMarket(r, "b")),
+    confidence: r.matchConfidence,
   }));
 
   if (direction === "widening" || direction === "narrowing") {
@@ -463,35 +757,38 @@ async function getAccuracy(params: Record<string, string>) {
 
   // Notable misses (worst Brier scores)
   const missConditions: any[] = [isNotNull(schema.accuracyRecords.brierScore)];
-
-  const notableMisses = await db.query.accuracyRecords.findMany({
-    where: and(...missConditions),
-    orderBy: [desc(schema.accuracyRecords.brierScore)],
-    limit: 20,
-    with: {
-      market: {
-        columns: { title: true, category: true, outcome: true },
-      },
-      platform: {
-        columns: { slug: true, name: true },
-      },
-    },
-  });
-
-  // Filter by platform post-query if needed
-  let filteredMisses = notableMisses;
   if (platformFilter && platformFilter !== "all") {
-    filteredMisses = notableMisses.filter((m) => m.platform.slug === platformFilter);
+    missConditions.push(eq(schema.platforms.slug, platformFilter));
   }
+
+  const notableMisses = await db
+    .select({
+      id: schema.accuracyRecords.id,
+      finalPrice: schema.accuracyRecords.finalPrice,
+      outcome: schema.accuracyRecords.outcome,
+      brierScore: schema.accuracyRecords.brierScore,
+      resolvedAt: schema.accuracyRecords.resolvedAt,
+      marketTitle: schema.markets.title,
+      marketCategory: schema.markets.category,
+      marketOutcome: schema.markets.outcome,
+      platformSlug: schema.platforms.slug,
+      platformName: schema.platforms.name,
+    })
+    .from(schema.accuracyRecords)
+    .innerJoin(schema.markets, eq(schema.accuracyRecords.marketId, schema.markets.id))
+    .innerJoin(schema.platforms, eq(schema.accuracyRecords.platformId, schema.platforms.id))
+    .where(and(...missConditions))
+    .orderBy(desc(schema.accuracyRecords.brierScore))
+    .limit(20);
 
   return {
     byPlatform,
     byCategory: Array.from(categoryMap.values()),
-    notableMisses: filteredMisses.map((m) => ({
+    notableMisses: notableMisses.map((m) => ({
       id: m.id,
-      marketTitle: m.market.title,
-      category: m.market.category,
-      platform: m.platform.slug,
+      marketTitle: m.marketTitle,
+      category: m.marketCategory,
+      platform: m.platformSlug,
       finalPrice: m.finalPrice ? Number(m.finalPrice) : null,
       outcome: m.outcome ? Number(m.outcome) : null,
       brierScore: m.brierScore ? Number(m.brierScore) : null,
