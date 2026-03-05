@@ -15,14 +15,6 @@ declare module "sst" {
       "type": "sst.sst.Secret"
       "value": string
     }
-    "GithubClientId": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
-    "GithubClientSecret": {
-      "type": "sst.sst.Secret"
-      "value": string
-    }
     "GoogleClientId": {
       "type": "sst.sst.Secret"
       "value": string
@@ -40,6 +32,14 @@ declare module "sst" {
       "value": string
     }
     "StripeWebhookSecret": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "TwitterClientId": {
+      "type": "sst.sst.Secret"
+      "value": string
+    }
+    "TwitterClientSecret": {
       "type": "sst.sst.Secret"
       "value": string
     }
