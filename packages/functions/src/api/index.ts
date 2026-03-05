@@ -572,19 +572,26 @@ async function getWhales(params: Record<string, string>) {
   const limit = Math.min(toNumber(params.limit, 50), 200);
   const offset = toNumber(params.offset, 0);
 
-  const trades = await db.query.whaleTrades.findMany({
-    orderBy: [desc(schema.whaleTrades.sizeUsd)],
-    limit,
-    offset,
-    with: {
-      market: {
-        columns: { id: true, title: true, category: true, yesPrice: true, noPrice: true },
-      },
-      platform: {
-        columns: { slug: true, name: true },
-      },
-    },
-  });
+  const trades = await db
+    .select({
+      id: schema.whaleTrades.id,
+      marketId: schema.whaleTrades.marketId,
+      traderAddress: schema.whaleTrades.traderAddress,
+      sizeUsd: schema.whaleTrades.sizeUsd,
+      side: schema.whaleTrades.side,
+      price: schema.whaleTrades.price,
+      detectedAt: schema.whaleTrades.detectedAt,
+      marketTitle: schema.markets.title,
+      marketCategory: schema.markets.category,
+      platformSlug: schema.platforms.slug,
+      platformName: schema.platforms.name,
+    })
+    .from(schema.whaleTrades)
+    .innerJoin(schema.markets, eq(schema.whaleTrades.marketId, schema.markets.id))
+    .innerJoin(schema.platforms, eq(schema.whaleTrades.platformId, schema.platforms.id))
+    .orderBy(desc(schema.whaleTrades.sizeUsd))
+    .limit(limit)
+    .offset(offset);
 
   const totalResult = await db.select({ count: count() }).from(schema.whaleTrades);
 
@@ -592,14 +599,14 @@ async function getWhales(params: Record<string, string>) {
     trades: trades.map((t) => ({
       id: t.id,
       marketId: t.marketId,
-      marketTitle: t.market.title,
-      marketCategory: t.market.category,
+      marketTitle: t.marketTitle,
+      marketCategory: t.marketCategory,
       traderAddress: t.traderAddress,
       sizeUsd: Number(t.sizeUsd),
       side: t.side,
       price: t.price ? Number(t.price) : null,
-      platform: t.platform.slug,
-      platformName: t.platform.name,
+      platform: t.platformSlug,
+      platformName: t.platformName,
       detectedAt: t.detectedAt,
     })),
     total: totalResult[0].count,
