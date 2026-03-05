@@ -20,8 +20,8 @@ export default $config({
     const nextAuthSecret = new sst.Secret("NextAuthSecret");
     const googleClientId = new sst.Secret("GoogleClientId");
     const googleClientSecret = new sst.Secret("GoogleClientSecret");
-    const githubClientId = new sst.Secret("GithubClientId");
-    const githubClientSecret = new sst.Secret("GithubClientSecret");
+    const twitterClientId = new sst.Secret("TwitterClientId");
+    const twitterClientSecret = new sst.Secret("TwitterClientSecret");
 
     // ── Data Collection Crons ────────────────────────────
 
@@ -92,13 +92,16 @@ export default $config({
         nextAuthSecret,
         googleClientId,
         googleClientSecret,
-        githubClientId,
-        githubClientSecret,
+        twitterClientId,
+        twitterClientSecret,
         stripeSecretKey,
         stripeWebhookSecret,
       ],
       environment: {
         NEXT_PUBLIC_API_URL: api.url,
+        NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY: "pk_live_51T7hzB2UO0ITF91UrnQXawRoKuwWYXmLbjxQX97gc2bT8dLpVKt2H6D2KiM50CMqcdLLpxj2EkxZSZYrhLLqV8Eh00bhhyD80J",
+        STRIPE_PRO_PRICE_ID: "price_1T7iE42UO0ITF91UTDDKftgH",
+        STRIPE_ENTERPRISE_PRICE_ID: "price_1T7iEm2UO0ITF91UzLUuByuw",
       },
     });
 
