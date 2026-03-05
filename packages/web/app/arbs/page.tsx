@@ -27,11 +27,15 @@ function arbToLocal(arb: ArbResult): ArbOpportunity {
   const rawSpread = arb.spreadRaw ? Math.abs(arb.spreadRaw) * 100 : Math.abs(priceA - priceB) * 100;
   const adjustedSpread = arb.spreadAdjusted ? Math.abs(arb.spreadAdjusted) * 100 : rawSpread * 0.85;
 
-  const detectedMs = new Date(arb.detectedAt).getTime();
+    // Show time until earliest market resolution (not time since detected)
+  const resA = arb.marketA.resolutionDate ? new Date(arb.marketA.resolutionDate).getTime() : Infinity;
+  const resB = arb.marketB.resolutionDate ? new Date(arb.marketB.resolutionDate).getTime() : Infinity;
+  const earliestRes = Math.min(resA, resB);
   const nowMs = Date.now();
-  const diffMins = Math.max(0, Math.floor((nowMs - detectedMs) / 60000));
-  const hours = Math.floor(diffMins / 60);
-  const mins = diffMins % 60;
+  const diffMins = earliestRes === Infinity ? -1 : Math.max(0, Math.floor((earliestRes - nowMs) / 60000));
+  const days = diffMins >= 0 ? Math.floor(diffMins / 1440) : 0;
+  const hours = diffMins >= 0 ? Math.floor((diffMins % 1440) / 60) : 0;
+  const mins = diffMins >= 0 ? diffMins % 60 : 0;
 
   return {
     id: String(arb.id),
@@ -43,9 +47,9 @@ function arbToLocal(arb: ArbResult): ArbOpportunity {
     sellPrice: arb.sellPrice ?? (buyPlatform === arb.marketA.platform.slug ? priceB : priceA),
     rawSpread,
     adjustedSpread,
-    volume: arb.volumeMin ?? (arb.marketA.volume24h ?? 0) + (arb.marketB.volume24h ?? 0),
+    volume: (arb.marketA.volume24h ?? 0) + (arb.marketB.volume24h ?? 0),
     trend: "stable",
-    timeOpen: `${hours}h ${mins}m`,
+    timeOpen: diffMins < 0 ? "—" : days > 0 ? `${days}d ${hours}h` : `${hours}h ${mins}m`,
   };
 }
 
@@ -437,7 +441,7 @@ export default function ArbsPage() {
                     className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
                     onClick={() => handleSort("timeOpen")}
                   >
-                    Time Open <SortArrow column="timeOpen" />
+                    Expires <SortArrow column="timeOpen" />
                   </TableHead>
                 </TableRow>
               </TableHeader>

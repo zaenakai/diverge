@@ -77,7 +77,9 @@ export async function handler(event: any) {
     return {
       statusCode: 200,
       headers: HEADERS,
-      body: JSON.stringify(body),
+      body: JSON.stringify(body, (_key, value) =>
+        value instanceof Date ? value.toISOString() : value
+      ),
     };
   } catch (err: any) {
     console.error("API error:", err);
