@@ -21,6 +21,15 @@ function truncateAddress(addr: string | null): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
+function getTraderProfileUrl(addr: string | null, platform: string): string | null {
+  if (!addr) return null;
+  if (platform === "polymarket") {
+    return `https://polymarket.com/profile/${addr}`;
+  }
+  // Kalshi doesn't have public trader profiles
+  return null;
+}
+
 export default function WhalesPage() {
   const [trades, setTrades] = useState<WhaleTradeResult[]>([]);
   const [total, setTotal] = useState(0);
@@ -279,7 +288,20 @@ export default function WhalesPage() {
                         : "—"}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-white/40">
-                      {truncateAddress(trade.traderAddress)}
+                      {(() => {
+                        const profileUrl = getTraderProfileUrl(trade.traderAddress, trade.platform);
+                        const display = truncateAddress(trade.traderAddress);
+                        return profileUrl ? (
+                          <a
+                            href={profileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="hover:text-emerald-400 transition-colors underline decoration-white/20 hover:decoration-emerald-400"
+                          >
+                            {display}
+                          </a>
+                        ) : display;
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))}

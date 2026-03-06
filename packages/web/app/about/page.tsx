@@ -104,10 +104,12 @@ export default function AboutPage() {
                     @zaenakai
                   </a>
                   <a
-                    href="mailto:threeagent@proton.me"
+                    href="https://x.com/zaenakai"
+                    target="_blank"
+                    rel="noopener noreferrer"
                     className="text-white/40 hover:text-white transition-colors"
                   >
-                    threeagent@proton.me
+                    𝕏 @zaenakai
                   </a>
                 </div>
               </div>

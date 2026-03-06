@@ -122,7 +122,7 @@ async function collectKalshi(platformId: number): Promise<number> {
           volume24h: market.volume_24h?.toString() ?? null,
           liquidity: market.liquidity?.toString() ?? null,
           resolutionDate: market.expiration_time ? new Date(market.expiration_time) : null,
-          url: `https://kalshi.com/markets/${market.event_ticker}`,
+          url: `https://kalshi.com/events/${market.event_ticker}`,
           metadata: {
             eventTicker: market.event_ticker,
             eventTitle: event.title,

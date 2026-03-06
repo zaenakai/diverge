@@ -23,6 +23,8 @@ import { Button } from "@/components/ui/button";
 type FilterType = "all" | "cross-platform" | "polymarket-only" | "kalshi-only" | string;
 type SortType = "volume" | "spread" | "closing" | "change";
 
+const DEFAULT_FILTER: FilterType = "cross-platform";
+
 const filters: { value: FilterType; label: string }[] = [
   { value: "all", label: "All" },
   { value: "cross-platform", label: "Cross-Platform" },
@@ -162,7 +164,7 @@ function SingleCard({ market }: { market: ExplorerMarket }) {
 export default function MarketsPage() {
   const { limits, isFree, isPro } = useTier();
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<FilterType>("all");
+  const [filter, setFilter] = useState<FilterType>(DEFAULT_FILTER);
   const [sort, setSort] = useState<SortType>("volume");
   const [allMarkets, setAllMarkets] = useState<ExplorerMarket[]>([]);
   const [loading, setLoading] = useState(true);

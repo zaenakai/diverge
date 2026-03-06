@@ -58,7 +58,7 @@ export default function RootLayout({
                 <a href="/pricing" className="hover:text-white transition">Pricing</a>
                 <a href="/about" className="hover:text-white transition">About</a>
                 <a href="/api-docs" className="hover:text-white transition">API Docs</a>
-                <a href="mailto:threeagent@proton.me" className="hover:text-white transition">Contact</a>
+                <a href="https://x.com/zaenakai" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Contact</a>
               </div>
             </div>
           </footer>

@@ -366,9 +366,18 @@ export default function Home() {
                   <div className="flex items-center gap-2 mt-0.5">
                     <PlatformBadge platform={trade.platform} />
                     <span className="text-[10px] text-white/30">{timeAgo(trade.timestamp)}</span>
-                    {trade.walletAddress && (
+                    {trade.walletAddress && trade.platform === "polymarket" ? (
+                      <a
+                        href={`https://polymarket.com/profile/${trade.walletAddress}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] text-white/20 font-mono hover:text-emerald-400 transition-colors"
+                      >
+                        {trade.walletAddress}
+                      </a>
+                    ) : trade.walletAddress ? (
                       <span className="text-[10px] text-white/20 font-mono">{trade.walletAddress}</span>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 <div className="text-right shrink-0">

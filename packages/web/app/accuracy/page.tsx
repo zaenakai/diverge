@@ -248,10 +248,21 @@ export default function AccuracyPage() {
     );
   }
 
-  if (!accuracyData) {
+  if (!accuracyData || (accuracyData.byPlatform.length === 0 && (!accuracyData.byCategory || accuracyData.byCategory.length === 0))) {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6">
-        <div className="text-center py-20 text-white/30">No accuracy data available yet.</div>
+        <h1 className="text-2xl font-bold mb-2">Platform Accuracy</h1>
+        <p className="text-white/50 mb-8">Comparing prediction accuracy between Polymarket & Kalshi</p>
+        <div className="text-center py-20 border border-white/5 rounded-xl bg-white/[0.02]">
+          <div className="text-4xl mb-4">📊</div>
+          <h3 className="text-lg font-semibold text-white/70 mb-2">Collecting Data</h3>
+          <p className="text-white/40 max-w-md mx-auto mb-4">
+            Accuracy tracking requires markets to resolve (reach their end date and settle).
+            We&apos;re monitoring 59,000+ markets — as they resolve, calibration curves and
+            Brier scores will populate here automatically.
+          </p>
+          <p className="text-white/20 text-sm">First results expected within 1–2 weeks of launch.</p>
+        </div>
       </div>
     );
   }
