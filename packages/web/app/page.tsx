@@ -313,9 +313,7 @@ export default function Home() {
             <h2 className="text-lg font-semibold flex items-center gap-2">
               <span>🐋</span> Whale Trades
             </h2>
-            <Link href="/whales" className="text-sm text-emerald-400 hover:text-emerald-300 transition">
-              View All →
-            </Link>
+            <span className="text-sm text-white/20">Coming Soon</span>
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] divide-y divide-white/[0.06]">
             {whales.length > 0 ? whales.slice(0, 6).map((trade) => (

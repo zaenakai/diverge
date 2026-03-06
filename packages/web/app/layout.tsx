@@ -11,6 +11,7 @@ const poppins = Poppins({ subsets: ["latin"], weight: ["200", "300"], variable: 
 const quicksand = Quicksand({ subsets: ["latin"], weight: ["300"], variable: "--font-logo-alt2" });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://diverge.market"),
   title: "Diverge — Cross-Platform Prediction Market Analytics",
   description:
     "Compare Polymarket vs Kalshi: arbitrage scanner, accuracy leaderboard, whale tracking, and cross-platform analytics for prediction markets.",
