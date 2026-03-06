@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { StatCard } from "@/components/stat-card";
 import { PlatformBadge } from "@/components/platform-badge";
 import { PriceChart } from "@/components/price-chart";
@@ -68,6 +68,7 @@ export default function ComparePage() {
   const [sortColumn, setSortColumn] = useState<SortColumn>("spread");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
   const [selected, setSelected] = useState<(MatchedMarket & { _polyId?: number; _kalshiId?: number }) | null>(null);
+  const detailRef = useRef<HTMLDivElement>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [hoveredBar, setHoveredBar] = useState<{ index: number; spread: number; date: string } | null>(null);
 
@@ -260,120 +261,9 @@ export default function ComparePage() {
         <div className="text-center py-16 text-white/30 text-sm">No matched markets found.</div>
       ) : (
         <>
-          {/* Matched Markets Table */}
-          <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="border-white/10 hover:bg-transparent">
-                    <TableHead
-                      className="text-white/40 text-xs cursor-pointer hover:text-white/70 transition-colors select-none"
-                      onClick={() => handleSort("title")}
-                    >
-                      Market <SortArrow column="title" />
-                    </TableHead>
-                    <TableHead
-                      className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                      onClick={() => handleSort("polymarketYes")}
-                    >
-                      <span className="text-blue-400">Polymarket</span> <SortArrow column="polymarketYes" />
-                    </TableHead>
-                    <TableHead
-                      className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                      onClick={() => handleSort("kalshiYes")}
-                    >
-                      <span className="text-orange-400">Kalshi</span> <SortArrow column="kalshiYes" />
-                    </TableHead>
-                    <TableHead
-                      className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                      onClick={() => handleSort("spread")}
-                    >
-                      Spread <SortArrow column="spread" />
-                    </TableHead>
-                    <TableHead
-                      className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                      onClick={() => handleSort("volume")}
-                    >
-                      Volume <SortArrow column="volume" />
-                    </TableHead>
-                    <TableHead
-                      className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
-                      onClick={() => handleSort("matchConfidence")}
-                    >
-                      Confidence <SortArrow column="matchConfidence" />
-                    </TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {sortedMarkets.map((market) => {
-                    const isSelected = selected?.id === market.id;
-                    return (
-                      <TableRow
-                        key={market.id}
-                        className={`border-white/5 cursor-pointer transition-colors ${
-                          isSelected
-                            ? "bg-emerald-500/5 border-l-2 border-l-emerald-500"
-                            : "hover:bg-white/[0.02]"
-                        }`}
-                        onClick={() => setSelected(isSelected ? null : market)}
-                      >
-                        <TableCell className="font-medium text-sm text-white/80 max-w-[200px]">
-                          <div className="flex items-center gap-2">
-                            <span className={`text-[9px] px-1 py-0.5 rounded border ${categoryColors[market.category] ?? categoryColors["Other"]}`}>
-                              {market.category}
-                            </span>
-                            <span className="truncate">{market.title}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="font-mono text-sm font-bold text-blue-400">
-                            {Math.round(market.polymarketYes * 100)}¢
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="font-mono text-sm font-bold text-orange-400">
-                            {Math.round(market.kalshiYes * 100)}¢
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className={`font-mono text-sm font-bold ${
-                            market.spread >= 5 ? "text-emerald-400" : market.spread >= 3 ? "text-yellow-400" : "text-white/50"
-                          }`}>
-                            {market.spread.toFixed(1)}%
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-1 text-xs text-white/50">
-                            <span className="text-blue-400 font-mono">{formatUsd(market.polyVolume24h)}</span>
-                            <span className="text-white/20">/</span>
-                            <span className="text-orange-400 font-mono">{formatUsd(market.kalshiVolume24h)}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] ${
-                              market.matchConfidence >= 0.95
-                                ? "border-emerald-500/30 text-emerald-400"
-                                : market.matchConfidence >= 0.9
-                                ? "border-yellow-500/30 text-yellow-400"
-                                : "border-white/20 text-white/40"
-                            }`}
-                          >
-                            {Math.round(market.matchConfidence * 100)}%
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-
-          {/* Detail Panel */}
+          {/* Detail Panel — shown above table for visibility */}
           {selected && (
-            <div className="rounded-xl border border-white/10 bg-white/[0.02] p-6 space-y-6">
+            <div ref={detailRef} className="rounded-xl border border-white/10 bg-white/[0.02] p-6 space-y-6">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-lg font-semibold">{selected.title}</h3>
@@ -458,7 +348,6 @@ export default function ComparePage() {
                       </div>
                     </div>
 
-                    {/* Spread History mini with tooltip */}
                     {selected.spreadHistory.length > 0 && (
                       <div className="mt-6 pt-4 border-t border-white/5">
                         <h5 className="text-xs text-white/40 mb-2">Spread History</h5>
@@ -532,6 +421,122 @@ export default function ComparePage() {
               </div>
             </div>
           )}
+
+          {/* Matched Markets Table */}
+          <div className="rounded-xl border border-white/10 bg-white/[0.02] overflow-hidden">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-white/10 hover:bg-transparent">
+                    <TableHead
+                      className="text-white/40 text-xs cursor-pointer hover:text-white/70 transition-colors select-none"
+                      onClick={() => handleSort("title")}
+                    >
+                      Market <SortArrow column="title" />
+                    </TableHead>
+                    <TableHead
+                      className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                      onClick={() => handleSort("polymarketYes")}
+                    >
+                      <span className="text-blue-400">Polymarket</span> <SortArrow column="polymarketYes" />
+                    </TableHead>
+                    <TableHead
+                      className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                      onClick={() => handleSort("kalshiYes")}
+                    >
+                      <span className="text-orange-400">Kalshi</span> <SortArrow column="kalshiYes" />
+                    </TableHead>
+                    <TableHead
+                      className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                      onClick={() => handleSort("spread")}
+                    >
+                      Spread <SortArrow column="spread" />
+                    </TableHead>
+                    <TableHead
+                      className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                      onClick={() => handleSort("volume")}
+                    >
+                      Volume <SortArrow column="volume" />
+                    </TableHead>
+                    <TableHead
+                      className="text-white/40 text-xs text-center cursor-pointer hover:text-white/70 transition-colors select-none"
+                      onClick={() => handleSort("matchConfidence")}
+                    >
+                      Confidence <SortArrow column="matchConfidence" />
+                    </TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {sortedMarkets.map((market) => {
+                    const isSelected = selected?.id === market.id;
+                    return (
+                      <TableRow
+                        key={market.id}
+                        className={`border-white/5 cursor-pointer transition-colors ${
+                          isSelected
+                            ? "bg-emerald-500/5 border-l-2 border-l-emerald-500"
+                            : "hover:bg-white/[0.02]"
+                        }`}
+                        onClick={() => {
+                          setSelected(isSelected ? null : market);
+                          if (!isSelected) setTimeout(() => detailRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+                        }}
+                      >
+                        <TableCell className="font-medium text-sm text-white/80 max-w-[200px]">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-[9px] px-1 py-0.5 rounded border ${categoryColors[market.category] ?? categoryColors["Other"]}`}>
+                              {market.category}
+                            </span>
+                            <span className="truncate">{market.title}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="font-mono text-sm font-bold text-blue-400">
+                            {Math.round(market.polymarketYes * 100)}¢
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className="font-mono text-sm font-bold text-orange-400">
+                            {Math.round(market.kalshiYes * 100)}¢
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <span className={`font-mono text-sm font-bold ${
+                            market.spread >= 5 ? "text-emerald-400" : market.spread >= 3 ? "text-yellow-400" : "text-white/50"
+                          }`}>
+                            {market.spread.toFixed(1)}%
+                          </span>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-1 text-xs text-white/50">
+                            <span className="text-blue-400 font-mono">{formatUsd(market.polyVolume24h)}</span>
+                            <span className="text-white/20">/</span>
+                            <span className="text-orange-400 font-mono">{formatUsd(market.kalshiVolume24h)}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] ${
+                              market.matchConfidence >= 0.95
+                                ? "border-emerald-500/30 text-emerald-400"
+                                : market.matchConfidence >= 0.9
+                                ? "border-yellow-500/30 text-yellow-400"
+                                : "border-white/20 text-white/40"
+                            }`}
+                          >
+                            {Math.round(market.matchConfidence * 100)}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+
+          {/* Detail panel moved to top of page */}
         </>
       )}
     </div>
