@@ -103,6 +103,7 @@ export interface ExplorerMarket {
   category: string;
   matched: boolean;
   platform?: Platform;
+  url?: string | null;
   yesPrice?: number;
   change24h: number;
   volume24h: number;

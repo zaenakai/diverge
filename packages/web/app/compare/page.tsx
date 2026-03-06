@@ -41,10 +41,12 @@ function matchToLocal(match: MatchedMarketPair): MatchedMarket {
     kalshiVolume24h: kalshiMarket.volume24h ?? 0,
     priceHistory: [],
     spreadHistory: [],
-    // Store market IDs for detail fetching
+    // Store market IDs and URLs for detail fetching and trade links
     _polyId: polyMarket.id,
     _kalshiId: kalshiMarket.id,
-  } as MatchedMarket & { _polyId: number; _kalshiId: number };
+    _polyUrl: polyMarket.url,
+    _kalshiUrl: kalshiMarket.url,
+  } as MatchedMarket & { _polyId: number; _kalshiId: number; _polyUrl: string | null; _kalshiUrl: string | null };
 }
 
 type SortColumn = "title" | "polymarketYes" | "kalshiYes" | "spread" | "volume" | "matchConfidence";
@@ -62,12 +64,12 @@ function getSortValue(market: MatchedMarket, column: SortColumn): number | strin
 }
 
 export default function ComparePage() {
-  const [markets, setMarkets] = useState<(MatchedMarket & { _polyId?: number; _kalshiId?: number })[]>([]);
+  const [markets, setMarkets] = useState<(MatchedMarket & { _polyId?: number; _kalshiId?: number; _polyUrl?: string | null; _kalshiUrl?: string | null })[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sortColumn, setSortColumn] = useState<SortColumn>("spread");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [selected, setSelected] = useState<(MatchedMarket & { _polyId?: number; _kalshiId?: number }) | null>(null);
+  const [selected, setSelected] = useState<(MatchedMarket & { _polyId?: number; _kalshiId?: number; _polyUrl?: string | null; _kalshiUrl?: string | null }) | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
   const [detailLoading, setDetailLoading] = useState(false);
   const [hoveredBar, setHoveredBar] = useState<{ index: number; spread: number; date: string } | null>(null);
@@ -381,24 +383,28 @@ export default function ComparePage() {
 
               {/* Trade Action Buttons */}
               <div className="flex items-center justify-center gap-4 pt-2">
-                <Button
-                  variant="outline"
-                  asChild
-                  className="border-blue-400/40 text-blue-400 hover:bg-blue-400/10 hover:text-blue-300 hover:border-blue-400/60"
-                >
-                  <a href="#" target="_blank" rel="noopener noreferrer">
-                    Trade on Polymarket →
-                  </a>
-                </Button>
-                <Button
-                  variant="outline"
-                  asChild
-                  className="border-orange-400/40 text-orange-400 hover:bg-orange-400/10 hover:text-orange-300 hover:border-orange-400/60"
-                >
-                  <a href="#" target="_blank" rel="noopener noreferrer">
-                    Trade on Kalshi →
-                  </a>
-                </Button>
+                {selected._polyUrl && (
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="border-blue-400/40 text-blue-400 hover:bg-blue-400/10 hover:text-blue-300 hover:border-blue-400/60"
+                  >
+                    <a href={selected._polyUrl} target="_blank" rel="noopener noreferrer">
+                      Trade on Polymarket →
+                    </a>
+                  </Button>
+                )}
+                {selected._kalshiUrl && (
+                  <Button
+                    variant="outline"
+                    asChild
+                    className="border-orange-400/40 text-orange-400 hover:bg-orange-400/10 hover:text-orange-300 hover:border-orange-400/60"
+                  >
+                    <a href={selected._kalshiUrl} target="_blank" rel="noopener noreferrer">
+                      Trade on Kalshi →
+                    </a>
+                  </Button>
+                )}
               </div>
 
               {/* Pro CTA */}

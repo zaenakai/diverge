@@ -25,9 +25,12 @@ function parseTimeOpen(timeOpen: string): number {
 }
 
 function getTimeColor(timeOpen: string): string {
+  if (timeOpen === "—") return "text-white/40";
+  // For time-until-expiry: more time = safer (green), less time = urgent (red)
+  if (timeOpen.includes("d")) return "text-emerald-400";
   const minutes = parseTimeOpen(timeOpen);
-  if (minutes < 60) return "text-emerald-400";
-  if (minutes <= 360) return "text-yellow-400";
+  if (minutes > 360) return "text-emerald-400";
+  if (minutes > 60) return "text-yellow-400";
   return "text-red-400";
 }
 
@@ -81,7 +84,7 @@ export function ArbCard({ arb }: ArbCardProps) {
       <div className="flex items-center justify-between text-xs text-white/40 mb-3">
         <span>Net: <span className={`font-mono ${getSpreadColor(arb.adjustedSpread)}`}>{arb.adjustedSpread.toFixed(1)}%</span> after fees</span>
         <span>{formatUsd(arb.volume)} vol</span>
-        <span className={`font-semibold ${getTimeColor(arb.timeOpen)}`}>Open {arb.timeOpen}</span>
+        <span className={`font-semibold ${getTimeColor(arb.timeOpen)}`}>Expires {arb.timeOpen}</span>
       </div>
 
       <div className="flex items-center gap-2 mt-auto pt-2 border-t border-white/[0.06]">

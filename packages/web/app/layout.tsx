@@ -54,9 +54,9 @@ export default function RootLayout({
             <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-white/30">
               <div><span className="font-[var(--font-logo)] tracking-[0.1em]">diverge</span>.market — cross-platform prediction market analytics</div>
               <div className="flex gap-4">
-                <a href="https://x.com/zaenakai" className="hover:text-white transition">Twitter</a>
-                <a href="#" className="hover:text-white transition">API Docs</a>
-                <a href="#" className="hover:text-white transition">About</a>
+                <a href="https://x.com/zaenakai" target="_blank" rel="noopener noreferrer" className="hover:text-white transition">Twitter</a>
+                <a href="/pricing" className="hover:text-white transition">Pricing</a>
+                <a href="mailto:threeagent@proton.me" className="hover:text-white transition">Contact</a>
               </div>
             </div>
           </footer>

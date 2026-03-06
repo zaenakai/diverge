@@ -58,6 +58,7 @@ function apiMarketToExplorer(market: ApiMarket): ExplorerMarket {
     category: market.category ?? "Other",
     matched: false,
     platform: market.platform.slug as Platform,
+    url: market.url,
     yesPrice: market.yesPrice ?? 0,
     change24h: 0,
     volume24h: market.volume24h ?? 0,
@@ -171,7 +172,7 @@ function SingleCard({ market }: { market: ExplorerMarket }) {
   const changePositive = market.change24h >= 0;
 
   return (
-    <a href="#" className="block">
+    <a href={market.url ?? "#"} target={market.url ? "_blank" : undefined} rel={market.url ? "noopener noreferrer" : undefined} className="block">
       <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] p-4 hover:border-white/[0.12] hover:bg-white/[0.05] transition-all cursor-pointer group">
         {/* Badges */}
         <div className="flex items-center gap-2 mb-2 flex-wrap">
