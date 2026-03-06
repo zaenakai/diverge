@@ -1,8 +1,6 @@
-import type { OpenNextConfig } from "@opennextjs/aws/types/open-next.js";
-
-const config: OpenNextConfig = {
+const config = {
   default: {},
-  buildCommand: "echo 'Skipping next build - already pre-built'",
+  buildCommand: "echo 'Using pre-built output'",
 };
 
 export default config;

@@ -3,7 +3,7 @@ import { createRequire as topLevelCreateRequire } from 'module';const require = 
 // open-next.config.ts
 var config = {
   default: {},
-  buildCommand: "echo 'Skipping next build - already pre-built'"
+  buildCommand: "echo 'Using pre-built output'"
 };
 var open_next_config_default = config;
 export {
