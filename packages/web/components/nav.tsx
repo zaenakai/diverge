@@ -14,6 +14,7 @@ const navItems = [
   { href: "/compare", label: "Compare" },
   { href: "/arbs", label: "Arb Scanner" },
   { href: "/accuracy", label: "Accuracy" },
+  { href: "/api-docs", label: "API" },
 ];
 
 export function Nav() {
