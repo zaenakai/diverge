@@ -891,7 +891,7 @@ async function getWhales(params: Record<string, string>) {
     .from(schema.whaleTrades)
     .innerJoin(schema.markets, eq(schema.whaleTrades.marketId, schema.markets.id))
     .innerJoin(schema.platforms, eq(schema.whaleTrades.platformId, schema.platforms.id))
-    .orderBy(desc(schema.whaleTrades.sizeUsd))
+    .orderBy(desc(schema.whaleTrades.detectedAt))
     .limit(limit)
     .offset(offset);
 

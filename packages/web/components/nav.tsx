@@ -4,15 +4,17 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useSession, signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Badge } from "@/components/ui/badge";
+import { TierBadge } from "@/components/tier-badge";
 
 const navItems = [
   { href: "/", label: "Home" },
   { href: "/markets", label: "Markets" },
   { href: "/compare", label: "Compare" },
   { href: "/arbs", label: "Arb Scanner" },
+  { href: "/whales", label: "Whales" },
   { href: "/accuracy", label: "Accuracy" },
   { href: "/api-docs", label: "API" },
 ];
@@ -20,6 +22,8 @@ const navItems = [
 export function Nav() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const { data: session, status } = useSession();
+  const isLoggedIn = status === "authenticated";
 
   return (
     <nav className="sticky top-0 z-50 border-b border-white/10 bg-[#0a0a0a]/80 backdrop-blur-xl">
@@ -47,25 +51,49 @@ export function Nav() {
                 {item.label}
               </Link>
             ))}
-            <Link href="/pricing">
-              <Badge variant="outline" className="ml-2 border-emerald-500/30 text-emerald-400 text-[10px] cursor-pointer hover:bg-emerald-500/10">
-                PRO
-              </Badge>
-            </Link>
+            {!isLoggedIn && (
+              <Link href="/pricing">
+                <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-semibold border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 cursor-pointer hover:bg-emerald-500/20 transition-colors">
+                  PRO
+                </span>
+              </Link>
+            )}
           </div>
 
           {/* Right side */}
           <div className="hidden md:flex items-center gap-3">
-            <Link href="/login">
-              <Button variant="ghost" size="sm" className="text-white/50 hover:text-white text-sm">
-                Sign In
-              </Button>
-            </Link>
-            <Link href="/pricing">
-              <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm">
-                Get Pro
-              </Button>
-            </Link>
+            {isLoggedIn ? (
+              <>
+                <TierBadge />
+                <Link
+                  href="/settings"
+                  className="text-sm text-white/50 hover:text-white transition-colors"
+                >
+                  Settings
+                </Link>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-white/50 hover:text-white text-sm"
+                  onClick={() => signOut()}
+                >
+                  Sign Out
+                </Button>
+              </>
+            ) : (
+              <>
+                <Link href="/login">
+                  <Button variant="ghost" size="sm" className="text-white/50 hover:text-white text-sm">
+                    Sign In
+                  </Button>
+                </Link>
+                <Link href="/pricing">
+                  <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white text-sm">
+                    Get Pro
+                  </Button>
+                </Link>
+              </>
+            )}
           </div>
 
           {/* Mobile menu */}
@@ -94,16 +122,37 @@ export function Nav() {
                   </Link>
                 ))}
                 <div className="border-t border-white/10 mt-4 pt-4 flex flex-col gap-2 px-4">
-                  <Link href="/login" onClick={() => setOpen(false)}>
-                    <Button variant="ghost" size="sm" className="text-white/50 justify-start w-full">
-                      Sign In
-                    </Button>
-                  </Link>
-                  <Link href="/pricing" onClick={() => setOpen(false)}>
-                    <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white w-full">
-                      Get Pro
-                    </Button>
-                  </Link>
+                  {isLoggedIn ? (
+                    <>
+                      <div className="mb-2"><TierBadge /></div>
+                      <Link href="/settings" onClick={() => setOpen(false)}>
+                        <Button variant="ghost" size="sm" className="text-white/50 justify-start w-full">
+                          Settings
+                        </Button>
+                      </Link>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-white/50 justify-start w-full"
+                        onClick={() => { signOut(); setOpen(false); }}
+                      >
+                        Sign Out
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Link href="/login" onClick={() => setOpen(false)}>
+                        <Button variant="ghost" size="sm" className="text-white/50 justify-start w-full">
+                          Sign In
+                        </Button>
+                      </Link>
+                      <Link href="/pricing" onClick={() => setOpen(false)}>
+                        <Button size="sm" className="bg-emerald-600 hover:bg-emerald-500 text-white w-full">
+                          Get Pro
+                        </Button>
+                      </Link>
+                    </>
+                  )}
                 </div>
               </div>
             </SheetContent>

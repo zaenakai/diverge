@@ -77,6 +77,17 @@ export default $config({
       },
     });
 
+    new sst.aws.Cron("WhaleCollector", {
+      schedule: "rate(2 minutes)",
+      function: {
+        handler: "packages/functions/src/collectors/whales.handler",
+        timeout: "60 seconds",
+        memory: "256 MB",
+        link: [databaseUrl],
+        ...nodejsConfig,
+      },
+    });
+
     new sst.aws.Cron("AccuracyCalculator", {
       schedule: "cron(0 0 * * ? *)",
       function: {

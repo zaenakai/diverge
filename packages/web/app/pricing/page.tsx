@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense } from "react";
-
 import { Check, X, Zap, Crown, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,15 +18,15 @@ const tiers = [
     cta: "Get Started",
     plan: null,
     features: {
-      "Market views": "20/day",
-      "Arb scanner": false,
-      "Price history": "7 days",
-      "Accuracy data": "Basic",
+      "Markets per page": "20",
+      "Arb scanner": "3 visible",
+      "Matched markets": "10 visible",
+      "Price history": "1 day",
+      "Compare detail panel": false,
+      "CSV export": false,
       "API access": false,
-      "Compare tool": "Preview",
       "Whale alerts": false,
-      "White-label": false,
-      "Priority support": false,
+      "Refresh interval": "5 min",
     },
   },
   {
@@ -40,15 +39,15 @@ const tiers = [
     plan: "pro" as const,
     popular: true,
     features: {
-      "Market views": "Unlimited",
-      "Arb scanner": true,
+      "Markets per page": "100",
+      "Arb scanner": "Unlimited",
+      "Matched markets": "Unlimited",
       "Price history": "90 days",
-      "Accuracy data": "Full",
-      "API access": "1,000 req/day",
-      "Compare tool": "Full history",
-      "Whale alerts": true,
-      "White-label": false,
-      "Priority support": false,
+      "Compare detail panel": true,
+      "CSV export": true,
+      "API access": false,
+      "Whale alerts": false,
+      "Refresh interval": "1 min",
     },
   },
   {
@@ -60,15 +59,15 @@ const tiers = [
     cta: "Go Enterprise",
     plan: "enterprise" as const,
     features: {
-      "Market views": "Unlimited",
-      "Arb scanner": true,
-      "Price history": "Unlimited",
-      "Accuracy data": "Full + Export",
-      "API access": "Unlimited",
-      "Compare tool": "Full history",
+      "Markets per page": "Unlimited",
+      "Arb scanner": "Unlimited",
+      "Matched markets": "Unlimited",
+      "Price history": "365 days",
+      "Compare detail panel": true,
+      "CSV export": true,
+      "API access": true,
       "Whale alerts": true,
-      "White-label": true,
-      "Priority support": true,
+      "Refresh interval": "10 sec",
     },
   },
 ];
@@ -124,6 +123,7 @@ function PricingContent() {
   }
 
   const currentTier = session?.user?.tier ?? "free";
+  const isLoggedIn = !!session;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a]">
@@ -140,6 +140,12 @@ function PricingContent() {
             Start free. Upgrade when you need full access to the arb scanner,
             extended history, and API.
           </p>
+          {isLoggedIn && currentTier !== "free" && (
+            <div className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-emerald-500/20 bg-emerald-500/5">
+              <span className="text-sm text-white/60">Current plan:</span>
+              <span className="text-sm font-semibold text-emerald-400 capitalize">{currentTier}</span>
+            </div>
+          )}
         </div>
 
         {/* Status banners */}
@@ -159,6 +165,7 @@ function PricingContent() {
           {tiers.map((tier) => {
             const Icon = tier.icon;
             const isCurrentTier = currentTier === (tier.plan ?? "free");
+            const isDowngrade = tier.plan === null && currentTier !== "free";
 
             return (
               <div
@@ -173,6 +180,14 @@ function PricingContent() {
                   <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                     <Badge className="bg-emerald-500 text-black font-medium px-3">
                       Most Popular
+                    </Badge>
+                  </div>
+                )}
+
+                {isCurrentTier && (
+                  <div className="absolute -top-3 right-4">
+                    <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-medium px-3">
+                      Current Plan
                     </Badge>
                   </div>
                 )}
@@ -212,16 +227,34 @@ function PricingContent() {
                 </ul>
 
                 {isCurrentTier ? (
-                  <Button
-                    variant="outline"
-                    className="w-full border-white/20 text-white/50 cursor-default"
-                    disabled
-                  >
-                    Current Plan
-                  </Button>
+                  <div className="space-y-2">
+                    <Button
+                      variant="outline"
+                      className="w-full border-emerald-500/30 text-emerald-400 cursor-default"
+                      disabled
+                    >
+                      ✓ Current Plan
+                    </Button>
+                    {currentTier !== "free" && (
+                      <Button
+                        variant="outline"
+                        onClick={handlePortal}
+                        disabled={loading === "portal"}
+                        className="w-full border-white/20 text-white/50 hover:text-white"
+                      >
+                        {loading === "portal" ? "Opening..." : "Manage Billing"}
+                      </Button>
+                    )}
+                  </div>
                 ) : tier.plan ? (
                   <Button
-                    onClick={() => handleCheckout(tier.plan!)}
+                    onClick={() => {
+                      if (!isLoggedIn) {
+                        router.push(`/login?callbackUrl=/pricing`);
+                        return;
+                      }
+                      handleCheckout(tier.plan!);
+                    }}
                     disabled={loading !== null}
                     className={`w-full ${
                       tier.popular
@@ -229,7 +262,7 @@ function PricingContent() {
                         : "bg-white/10 hover:bg-white/20 text-white"
                     }`}
                   >
-                    {loading === tier.plan ? "Redirecting..." : tier.cta}
+                    {loading === tier.plan ? "Redirecting..." : isLoggedIn ? tier.cta : `Sign in to ${tier.cta}`}
                   </Button>
                 ) : (
                   <Button
@@ -246,7 +279,7 @@ function PricingContent() {
         </div>
 
         {/* Manage subscription */}
-        {currentTier !== "free" && (
+        {isLoggedIn && currentTier !== "free" && (
           <div className="text-center mb-16">
             <Button
               variant="outline"
@@ -270,6 +303,9 @@ function PricingContent() {
                   {tiers.map((tier) => (
                     <th key={tier.name} className="text-center py-4 px-4 text-white/60 font-medium">
                       {tier.name}
+                      {currentTier === (tier.plan ?? "free") && (
+                        <span className="ml-1 text-[10px] text-emerald-400">(you)</span>
+                      )}
                     </th>
                   ))}
                 </tr>
@@ -302,7 +338,6 @@ function PricingContent() {
     </div>
   );
 }
-
 
 export default function PricingPage() {
   return (
