@@ -60,7 +60,7 @@ async function collectPolymarket(platformId: number): Promise<number> {
           volume24h: (parseFloat(market.volume24hr) || 0).toString(),
           liquidity: (parseFloat(market.liquidity) || 0).toString(),
           resolutionDate: market.endDate ? new Date(market.endDate) : null,
-          url: `https://polymarket.com/event/${market.slug}`,
+          url: `https://polymarket.com/event/${market.events?.[0]?.slug ?? market.slug}`,
           metadata: {
             conditionId: market.conditionId,
             clobTokenIds: market.clobTokenIds,
