@@ -45,6 +45,8 @@ function arbToCard(arb: ArbResult): ArbOpportunity {
     volume: arb.volumeMin ?? (arb.marketA.volume24h ?? 0) + (arb.marketB.volume24h ?? 0),
     trend: "stable",
     timeOpen: `${hours}h ${mins}m`,
+    buyUrl: buyPlatform === arb.marketA.platform.slug ? arb.marketA.url : arb.marketB.url,
+    sellUrl: buyPlatform === arb.marketA.platform.slug ? arb.marketB.url : arb.marketA.url,
   };
 }
 

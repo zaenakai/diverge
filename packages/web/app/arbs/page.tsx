@@ -50,6 +50,8 @@ function arbToLocal(arb: ArbResult): ArbOpportunity {
     volume: (arb.marketA.volume24h ?? 0) + (arb.marketB.volume24h ?? 0),
     trend: "stable",
     timeOpen: diffMins < 0 ? "—" : days > 0 ? `${days}d ${hours}h` : `${hours}h ${mins}m`,
+    buyUrl: buyPlatform === arb.marketA.platform.slug ? arb.marketA.url : arb.marketB.url,
+    sellUrl: buyPlatform === arb.marketA.platform.slug ? arb.marketB.url : arb.marketA.url,
   };
 }
 

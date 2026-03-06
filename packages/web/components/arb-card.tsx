@@ -86,16 +86,28 @@ export function ArbCard({ arb }: ArbCardProps) {
 
       <div className="flex items-center gap-2 mt-auto pt-2 border-t border-white/[0.06]">
         <a
-          href="#"
-          className="flex-1 text-center text-[11px] font-medium py-1.5 rounded-lg bg-blue-400/10 text-blue-400 border border-blue-400/20 hover:bg-blue-400/20 transition"
+          href={arb.buyUrl ?? "#"}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`flex-1 text-center text-[11px] font-medium py-1.5 rounded-lg border transition ${
+            arb.buyPlatform === "polymarket"
+              ? "bg-blue-400/10 text-blue-400 border-blue-400/20 hover:bg-blue-400/20"
+              : "bg-orange-400/10 text-orange-400 border-orange-400/20 hover:bg-orange-400/20"
+          }`}
         >
-          Trade on Polymarket →
+          Buy on {arb.buyPlatform === "polymarket" ? "Polymarket" : "Kalshi"} →
         </a>
         <a
-          href="#"
-          className="flex-1 text-center text-[11px] font-medium py-1.5 rounded-lg bg-orange-400/10 text-orange-400 border border-orange-400/20 hover:bg-orange-400/20 transition"
+          href={arb.sellUrl ?? "#"}
+          target="_blank"
+          rel="noopener noreferrer"
+          className={`flex-1 text-center text-[11px] font-medium py-1.5 rounded-lg border transition ${
+            arb.sellPlatform === "polymarket"
+              ? "bg-blue-400/10 text-blue-400 border-blue-400/20 hover:bg-blue-400/20"
+              : "bg-orange-400/10 text-orange-400 border-orange-400/20 hover:bg-orange-400/20"
+          }`}
         >
-          Trade on Kalshi →
+          Sell on {arb.sellPlatform === "polymarket" ? "Polymarket" : "Kalshi"} →
         </a>
       </div>
     </div>

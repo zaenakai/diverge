@@ -92,6 +92,8 @@ export interface ArbOpportunity {
   volume: number;
   trend: "widening" | "narrowing" | "stable";
   timeOpen: string;
+  buyUrl?: string | null;
+  sellUrl?: string | null;
 }
 
 /** Shape used by the Markets Explorer page */
