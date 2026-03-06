@@ -2,6 +2,7 @@ import NextAuth from "next-auth";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import Google from "next-auth/providers/google";
 import Twitter from "next-auth/providers/twitter";
+import Nodemailer from "next-auth/providers/nodemailer";
 import { db } from "./db";
 import * as schema from "./schema";
 import { eq } from "drizzle-orm";
@@ -33,35 +34,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       clientId: process.env.TWITTER_CLIENT_ID!,
       clientSecret: process.env.TWITTER_CLIENT_SECRET!,
     }),
+    Nodemailer({
+      server: {
+        host: "email-smtp.us-east-1.amazonaws.com",
+        port: 465,
+        secure: true,
+        auth: {
+          user: process.env.SES_SMTP_USER!,
+          pass: process.env.SES_SMTP_PASS!,
+        },
+      },
+      from: "Diverge <noreply@zaen.me>",
+    }),
   ],
   session: {
-    strategy: "jwt",
+    strategy: "database",  // Required for email magic links (verification tokens)
   },
   callbacks: {
-    async jwt({ token, user, trigger }) {
-      if (user) {
-        token.id = user.id!;
-        token.tier = (user as Record<string, unknown>).tier ?? "free";
-        token.apiKey = (user as Record<string, unknown>).apiKey ?? null;
-      }
-      // Refresh tier from DB on session update
-      if (trigger === "update" && token.id) {
+    async session({ session, user }) {
+      if (session.user && user) {
+        session.user.id = user.id!;
+        // Fetch tier and apiKey from DB
         const dbUser = await db.query.users.findFirst({
-          where: eq(schema.users.id, token.id as string),
+          where: eq(schema.users.id, user.id!),
           columns: { tier: true, apiKey: true },
         });
-        if (dbUser) {
-          token.tier = dbUser.tier;
-          token.apiKey = dbUser.apiKey;
-        }
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (session.user) {
-        session.user.id = token.id as string;
-        session.user.tier = (token.tier as string) ?? "free";
-        session.user.apiKey = (token.apiKey as string | null) ?? null;
+        session.user.tier = dbUser?.tier ?? "free";
+        session.user.apiKey = dbUser?.apiKey ?? null;
       }
       return session;
     },

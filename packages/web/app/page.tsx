@@ -79,6 +79,7 @@ function matchToMover(match: MatchedMarketPair): MoverItem {
 interface WhaleDisplay {
   id: number;
   market: string;
+  marketUrl: string | null;
   platform: Platform;
   side: string;
   amount: number;
@@ -91,6 +92,7 @@ function whaleToDisplay(trade: WhaleTradeResult): WhaleDisplay {
   return {
     id: trade.id,
     market: trade.marketTitle,
+    marketUrl: trade.marketUrl ?? null,
     platform: trade.platform as Platform,
     side: trade.side.toUpperCase(),
     amount: trade.sizeUsd,
@@ -362,7 +364,11 @@ export default function Home() {
                   {trade.side}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-sm text-white/80 truncate">{trade.market}</div>
+                  {trade.marketUrl ? (
+                    <a href={trade.marketUrl} target="_blank" rel="noopener noreferrer" className="text-sm text-white/80 truncate block hover:text-emerald-400 transition-colors">{trade.market}</a>
+                  ) : (
+                    <div className="text-sm text-white/80 truncate">{trade.market}</div>
+                  )}
                   <div className="flex items-center gap-2 mt-0.5">
                     <PlatformBadge platform={trade.platform} />
                     <span className="text-[10px] text-white/30">{timeAgo(trade.timestamp)}</span>

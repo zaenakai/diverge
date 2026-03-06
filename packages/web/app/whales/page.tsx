@@ -21,12 +21,15 @@ function truncateAddress(addr: string | null): string {
   return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
-function getTraderProfileUrl(addr: string | null, platform: string): string | null {
+function getTraderProfileUrl(addr: string | null, platform: string, marketUrl?: string | null): string | null {
   if (!addr) return null;
   if (platform === "polymarket") {
     return `https://polymarket.com/profile/${addr}`;
   }
-  // Kalshi doesn't have public trader profiles
+  // Kalshi doesn't have public trader profiles — link to the market instead
+  if (platform === "kalshi" && marketUrl) {
+    return marketUrl;
+  }
   return null;
 }
 
@@ -259,9 +262,18 @@ export default function WhalesPage() {
                       {timeAgo(trade.detectedAt)}
                     </TableCell>
                     <TableCell className="text-sm text-white/80 max-w-[280px]">
-                      <span className="truncate block">
-                        {trade.marketTitle}
-                      </span>
+                      {trade.marketUrl ? (
+                        <a
+                          href={trade.marketUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="truncate block hover:text-emerald-400 transition-colors"
+                        >
+                          {trade.marketTitle}
+                        </a>
+                      ) : (
+                        <span className="truncate block">{trade.marketTitle}</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-center">
                       <PlatformBadge
@@ -289,7 +301,7 @@ export default function WhalesPage() {
                     </TableCell>
                     <TableCell className="font-mono text-xs text-white/40">
                       {(() => {
-                        const profileUrl = getTraderProfileUrl(trade.traderAddress, trade.platform);
+                        const profileUrl = getTraderProfileUrl(trade.traderAddress, trade.platform, trade.marketUrl);
                         const display = truncateAddress(trade.traderAddress);
                         return profileUrl ? (
                           <a

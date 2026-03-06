@@ -22,6 +22,8 @@ export default $config({
     const googleClientSecret = new sst.Secret("GoogleClientSecret");
     const twitterClientId = new sst.Secret("TwitterClientId");
     const twitterClientSecret = new sst.Secret("TwitterClientSecret");
+    const sesSmtpUser = new sst.Secret("SesSmtpUser");
+    const sesSmtpPass = new sst.Secret("SesSmtpPass");
 
     // ── Data Collection Crons ────────────────────────────
 
@@ -143,6 +145,8 @@ export default $config({
         GOOGLE_CLIENT_SECRET: googleClientSecret.value,
         TWITTER_CLIENT_ID: twitterClientId.value,
         TWITTER_CLIENT_SECRET: twitterClientSecret.value,
+        SES_SMTP_USER: sesSmtpUser.value,
+        SES_SMTP_PASS: sesSmtpPass.value,
       },
     });
 

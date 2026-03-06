@@ -1,13 +1,26 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useState } from "react";
 import { signIn } from "next-auth/react";
 import { useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 function LoginContent() {
   const searchParams = useSearchParams();
   const callbackUrl = searchParams.get("callbackUrl") ?? "/markets";
+  const [email, setEmail] = useState("");
+  const [emailSent, setEmailSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const handleEmailSignIn = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email) return;
+    setLoading(true);
+    await signIn("nodemailer", { email, callbackUrl, redirect: false });
+    setEmailSent(true);
+    setLoading(false);
+  };
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
@@ -56,6 +69,45 @@ function LoginContent() {
             </svg>
             Continue with X
           </Button>
+
+          {/* Divider */}
+          <div className="relative py-2">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-white/10" />
+            </div>
+            <div className="relative flex justify-center text-xs">
+              <span className="bg-[#0a0a0a] px-2 text-white/30">or</span>
+            </div>
+          </div>
+
+          {/* Email Magic Link */}
+          {emailSent ? (
+            <div className="text-center py-4 px-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5">
+              <p className="text-emerald-400 text-sm font-medium mb-1">Check your email</p>
+              <p className="text-white/40 text-xs">
+                We sent a sign-in link to <span className="text-white/60">{email}</span>
+              </p>
+            </div>
+          ) : (
+            <form onSubmit={handleEmailSignIn} className="space-y-2">
+              <Input
+                type="email"
+                placeholder="you@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="h-12 bg-white/5 border-white/10 text-white placeholder:text-white/30"
+              />
+              <Button
+                type="submit"
+                disabled={loading || !email}
+                variant="outline"
+                className="w-full h-12 border-white/10 bg-white/5 hover:bg-white/10 text-white gap-3"
+              >
+                {loading ? "Sending..." : "Sign in with Email"}
+              </Button>
+            </form>
+          )}
         </div>
 
         <p className="text-center text-xs text-white/20 mt-8">

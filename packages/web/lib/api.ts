@@ -153,6 +153,7 @@ export interface WhaleTradeResult {
   marketId: number;
   marketTitle: string;
   marketCategory: string | null;
+  marketUrl: string | null;
   traderAddress: string | null;
   sizeUsd: number;
   side: string;

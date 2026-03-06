@@ -885,6 +885,7 @@ async function getWhales(params: Record<string, string>) {
       detectedAt: schema.whaleTrades.detectedAt,
       marketTitle: schema.markets.title,
       marketCategory: schema.markets.category,
+      marketUrl: schema.markets.url,
       platformSlug: schema.platforms.slug,
       platformName: schema.platforms.name,
     })
@@ -903,6 +904,7 @@ async function getWhales(params: Record<string, string>) {
       marketId: t.marketId,
       marketTitle: t.marketTitle,
       marketCategory: t.marketCategory,
+      marketUrl: t.marketUrl,
       traderAddress: t.traderAddress,
       sizeUsd: Number(t.sizeUsd),
       side: t.side,
