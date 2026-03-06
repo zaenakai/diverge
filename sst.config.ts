@@ -112,6 +112,7 @@ export default $config({
     // ── Next.js Frontend ─────────────────────────────────
     const site = new sst.aws.Nextjs("Web", {
       path: "packages/web",
+
       domain: {
         name: "diverge.market",
         redirects: ["www.diverge.market"]
