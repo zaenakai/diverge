@@ -188,19 +188,34 @@ export default function Home() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-8">
       {/* Hero */}
-      <section className="py-6">
-        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-white">
-          Find price gaps between prediction markets before anyone else
+      <section className="py-8 sm:py-12">
+        <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-medium mb-4">
+          <span className="relative flex h-2 w-2">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+          </span>
+          Live — monitoring {(stats?.totalMarkets ?? 0).toLocaleString()} markets
+        </div>
+        <h1 className="text-3xl sm:text-5xl font-bold tracking-tight text-white leading-tight">
+          Find price gaps between<br className="hidden sm:block" /> prediction markets
         </h1>
-        <p className="text-white/50 mt-2 text-lg max-w-2xl">
+        <p className="text-white/50 mt-3 text-lg max-w-2xl">
           Diverge monitors Polymarket & Kalshi in real-time, surfacing arbitrage opportunities the moment spreads appear.
         </p>
-        <Link
-          href="/arbs"
-          className="inline-flex items-center mt-4 px-5 py-2.5 rounded-lg bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-400 transition"
-        >
-          Explore Arb Opportunities →
-        </Link>
+        <div className="flex flex-wrap gap-3 mt-6">
+          <Link
+            href="/arbs"
+            className="inline-flex items-center px-5 py-2.5 rounded-lg bg-emerald-500 text-white font-semibold text-sm hover:bg-emerald-400 transition"
+          >
+            Explore Arb Opportunities →
+          </Link>
+          <Link
+            href="/compare"
+            className="inline-flex items-center px-5 py-2.5 rounded-lg border border-white/10 text-white/70 font-medium text-sm hover:bg-white/5 transition"
+          >
+            Compare Markets
+          </Link>
+        </div>
       </section>
 
       {/* Stats Bar */}
@@ -228,6 +243,23 @@ export default function Home() {
           </div>
         ))}
       </div>
+
+      {/* How It Works */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          { step: "1", icon: "🔍", title: "Scan", desc: "We pull markets from Polymarket & Kalshi every minute and match identical events across platforms." },
+          { step: "2", icon: "📊", title: "Compare", desc: "Our engine calculates real-time price spreads, adjusting for platform fees and liquidity." },
+          { step: "3", icon: "⚡", title: "Alert", desc: "When spreads cross profitable thresholds, opportunities surface instantly on the dashboard." },
+        ].map((item) => (
+          <div key={item.step} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-5">
+            <div className="flex items-center gap-3 mb-2">
+              <span className="text-xl">{item.icon}</span>
+              <span className="text-sm font-semibold text-white/80">{item.title}</span>
+            </div>
+            <p className="text-xs text-white/40 leading-relaxed">{item.desc}</p>
+          </div>
+        ))}
+      </section>
 
       {/* Top Arb Opportunities */}
       <section>
