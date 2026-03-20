@@ -16,7 +16,7 @@ import type { Market } from "../../../core/src/types";
 import { db, schema } from "../../../core/src/db/index";
 import { eq, and, or, gt, sql, isNotNull, isNull, desc } from "drizzle-orm";
 
-const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '';
 
 /** Extract structured fields for markets missing them (limit 500 per run) */
 async function extractMissingStructuredFields() {
