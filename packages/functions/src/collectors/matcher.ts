@@ -11,9 +11,63 @@
  */
 
 import { findMatches } from "../../../core/src/matching";
+import { extractStructuredFieldsBatch } from "../../../core/src/extraction";
 import type { Market } from "../../../core/src/types";
 import { db, schema } from "../../../core/src/db/index";
-import { eq, and, or, gt, sql, isNotNull, desc } from "drizzle-orm";
+import { eq, and, or, gt, sql, isNotNull, isNull, desc } from "drizzle-orm";
+
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY || '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';
+
+/** Extract structured fields for markets missing them (limit 500 per run) */
+async function extractMissingStructuredFields() {
+  const marketsToExtract = await db
+    .select({
+      id: schema.markets.id,
+      title: schema.markets.title,
+      description: schema.markets.description,
+    })
+    .from(schema.markets)
+    .where(
+      and(
+        eq(schema.markets.status, "active"),
+        isNull(schema.markets.structuredFields),
+      )
+    )
+    .limit(500);
+
+  if (marketsToExtract.length === 0) {
+    console.log("[MarketMatcher] All active markets have structured fields.");
+    return;
+  }
+
+  console.log(`[MarketMatcher] Extracting structured fields for ${marketsToExtract.length} markets...`);
+
+  const BATCH_SIZE = 20;
+  let processed = 0;
+
+  for (let i = 0; i < marketsToExtract.length; i += BATCH_SIZE) {
+    const batch = marketsToExtract.slice(i, i + BATCH_SIZE);
+    const titles = batch.map((m) => ({
+      title: m.title,
+      description: m.description ?? undefined,
+    }));
+
+    const results = await extractStructuredFieldsBatch(OPENROUTER_API_KEY, titles);
+
+    for (let j = 0; j < batch.length; j++) {
+      const fields = results[j];
+      if (fields) {
+        await db
+          .update(schema.markets)
+          .set({ structuredFields: fields })
+          .where(eq(schema.markets.id, batch[j].id));
+      }
+    }
+
+    processed += batch.length;
+    console.log(`[MarketMatcher] Extracted ${processed}/${marketsToExtract.length} structured fields`);
+  }
+}
 
 /** Convert a DB market row (flat with platformSlug/platformName) to the core Market type */
 function toMarketType(row: any): Market {
@@ -34,6 +88,7 @@ function toMarketType(row: any): Market {
     volume24h: row.volume24h ? Number(row.volume24h) : undefined,
     liquidity: row.liquidity ? Number(row.liquidity) : undefined,
     metadata: row.metadata as Record<string, unknown> | undefined,
+    structuredFields: row.structuredFields as Market["structuredFields"],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -58,6 +113,9 @@ function extractBucketKeys(title: string): string[] {
 
 export async function handler() {
   console.log("[MarketMatcher] Starting cross-platform matching...");
+
+  // ── Step 0: Extract structured fields for markets that don't have them ──
+  await extractMissingStructuredFields();
 
   // Get already-matched market IDs
   const existingMatches = await db
@@ -92,6 +150,7 @@ export async function handler() {
       volume24h: schema.markets.volume24h,
       liquidity: schema.markets.liquidity,
       metadata: schema.markets.metadata,
+      structuredFields: schema.markets.structuredFields,
       createdAt: schema.markets.createdAt,
       updatedAt: schema.markets.updatedAt,
       platformSlug: schema.platforms.slug,

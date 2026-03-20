@@ -58,6 +58,7 @@ export const markets = pgTable(
     volume24h: decimal("volume_24h", { precision: 18, scale: 2 }),
     liquidity: decimal("liquidity", { precision: 18, scale: 2 }),
     metadata: jsonb("metadata"),
+    structuredFields: jsonb("structured_fields"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },

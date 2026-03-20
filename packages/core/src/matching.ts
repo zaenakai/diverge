@@ -9,7 +9,7 @@
  * 5. Manual curation for ambiguous cases
  */
 
-import type { Market, MatchMethod } from "./types";
+import type { Market, MatchMethod, StructuredFields } from "./types";
 
 interface MatchCandidate {
   marketA: Market;
@@ -128,6 +128,84 @@ function jaccardSimilarity(a: string, b: string): number {
   return intersection.size / union.size;
 }
 
+// ── LLM Structured Field Matching ───────────────────
+
+function parseISODate(s: string): Date | null {
+  const match = s.match(/^\d{4}-\d{2}-\d{2}/);
+  if (match) return new Date(match[0]);
+  return null;
+}
+
+function timeframesMatch(a: string, b: string): boolean {
+  const dateA = parseISODate(a);
+  const dateB = parseISODate(b);
+  if (dateA && dateB) {
+    const diffMs = Math.abs(dateA.getTime() - dateB.getTime());
+    const diffDays = diffMs / (1000 * 60 * 60 * 24);
+    return diffDays <= 7;
+  }
+  // If not ISO dates, do case-insensitive comparison
+  return a.toLowerCase().trim() === b.toLowerCase().trim();
+}
+
+function thresholdsMatch(a: number, b: number): boolean {
+  if (a === b) return true;
+  const ratio = Math.min(a, b) / Math.max(a, b);
+  return ratio >= 0.99; // within 1% tolerance
+}
+
+function computeStructuredConfidence(a: StructuredFields, b: StructuredFields): number | null {
+  // Must share asset OR entity (non-null)
+  const assetMatch = a.asset && b.asset && a.asset.toLowerCase() === b.asset.toLowerCase();
+  const entityMatch = a.entity && b.entity && a.entity.toLowerCase() === b.entity.toLowerCase();
+  if (!assetMatch && !entityMatch) return null;
+
+  // Must share type
+  if (a.type !== b.type) return null;
+
+  // Direction must match if both present
+  if (a.direction && b.direction && a.direction !== b.direction) return null;
+
+  // Threshold unit must match if both present
+  if (a.thresholdUnit && b.thresholdUnit && a.thresholdUnit !== b.thresholdUnit) return null;
+
+  // Threshold must match (within 1%) if both present
+  if (a.threshold != null && b.threshold != null && !thresholdsMatch(a.threshold, b.threshold)) return null;
+
+  // Resolution type must match if both present — CRITICAL
+  if (a.resolutionType && b.resolutionType && a.resolutionType !== b.resolutionType) return null;
+
+  // Build confidence score
+  let confidence = 0.5; // base for asset/entity + type match
+
+  // Threshold match
+  if (a.threshold != null && b.threshold != null && thresholdsMatch(a.threshold, b.threshold)) {
+    confidence += 0.15;
+  }
+
+  // Timeframe match
+  if (a.timeframe && b.timeframe && timeframesMatch(a.timeframe, b.timeframe)) {
+    confidence += 0.10;
+  }
+
+  // Resolution type match
+  if (a.resolutionType && b.resolutionType && a.resolutionType === b.resolutionType) {
+    confidence += 0.10;
+  }
+
+  // Direction match
+  if (a.direction && b.direction && a.direction === b.direction) {
+    confidence += 0.10;
+  }
+
+  // Category match
+  if (a.category && b.category && a.category === b.category) {
+    confidence += 0.05;
+  }
+
+  return Math.min(confidence, 1.0);
+}
+
 // ── Main Matching Function ──────────────────────────
 
 export function findMatches(
@@ -137,6 +215,28 @@ export function findMatches(
 ): MatchCandidate[] {
   const matches: MatchCandidate[] = [];
   const usedKalshi = new Set<number>();
+
+  // Pass 0: LLM-structured matching (highest confidence, highest priority)
+  for (const pm of polymarketMarkets) {
+    if (!pm.structuredFields) continue;
+
+    for (const km of kalshiMarkets) {
+      if (usedKalshi.has(km.id)) continue;
+      if (!km.structuredFields) continue;
+
+      const confidence = computeStructuredConfidence(pm.structuredFields, km.structuredFields);
+      if (confidence !== null && confidence >= minConfidence) {
+        matches.push({
+          marketA: pm,
+          marketB: km,
+          confidence,
+          method: "llm_structured",
+        });
+        usedKalshi.add(km.id);
+        break;
+      }
+    }
+  }
 
   // Extract features for all markets
   const polyFeatures = polymarketMarkets.map((m) => ({
@@ -148,8 +248,9 @@ export function findMatches(
     features: extractFeatures(m),
   }));
 
-  // Pass 1: Structured matching (high confidence)
+  // Pass 1: Regex-structured matching (high confidence)
   for (const pm of polyFeatures) {
+    if (matches.some((m) => m.marketA.id === pm.market.id)) continue;
     for (const km of kalshiFeatures) {
       if (usedKalshi.has(km.market.id)) continue;
 

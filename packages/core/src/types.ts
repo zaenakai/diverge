@@ -4,7 +4,7 @@ export type Platform = "polymarket" | "kalshi";
 
 export type MarketStatus = "active" | "resolved" | "cancelled" | "closed";
 
-export type MatchMethod = "auto_structured" | "auto_fuzzy" | "manual";
+export type MatchMethod = "llm_structured" | "auto_structured" | "auto_fuzzy" | "manual";
 
 // ── Market ───────────────────────────────────────────
 
@@ -25,8 +25,24 @@ export interface Market {
   volume24h?: number;
   liquidity?: number;
   metadata?: Record<string, unknown>;
+  structuredFields?: StructuredFields | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+// ── Structured Fields (LLM-extracted) ────────────────
+
+export interface StructuredFields {
+  asset?: string | null;
+  type: string;
+  direction?: string | null;
+  threshold?: number | null;
+  thresholdUnit?: string | null;
+  timeframe?: string | null;
+  resolutionType?: string | null;
+  entity?: string | null;
+  category?: string | null;
+  normalizedQuestion?: string | null;
 }
 
 // ── Market Match (cross-platform) ────────────────────
